@@ -1,4 +1,6 @@
-// Автоматично създаване на базата при първото отваряне на сайта
+// Автоматично създаване и обновяване на базата.
+// При първата заявка след deploy пускаме всички CREATE ... IF NOT EXISTS —
+// така нови таблици се добавят сами, без команди. Учебната програма влиза само в празна база.
 import { schema, seed } from './db-data.js';
 import { HttpError } from './http.js';
 
@@ -12,8 +14,7 @@ export async function ensureDb(env) {
       'Базата не е свързана. В Cloudflare: проектът → Settings → Bindings → добави D1 база с име DB и направи нов deploy.',
     );
   }
-  const has = await env.DB.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'links'").first();
-  if (!has) await env.DB.batch(schema.map((s) => env.DB.prepare(s)));
+  await env.DB.batch(schema.map((s) => env.DB.prepare(s)));
   const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM sections').first();
   if (n === 0) await env.DB.batch(seed.map((s) => env.DB.prepare(s)));
   ready = true;

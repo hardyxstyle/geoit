@@ -123,7 +123,7 @@ document.addEventListener('click', async (e) => {
       document.getElementById(decodeURIComponent(a.hash.slice(1)))?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
-    go(a.pathname + a.search);
+    go(a.pathname + a.search + a.hash);
     return;
   }
 

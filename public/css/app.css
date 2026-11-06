@@ -483,3 +483,60 @@ dialog .buttons { display: flex; justify-content: flex-end; gap: .5rem; margin-t
 .theme-head h2 { font-size: 1.25rem; }
 @media (max-width: 900px) { .topic-body .goals { order: -1; } }
 .topic-head h1 { font-size: clamp(1.3rem, 1rem + 1.8vw, 2.2rem); }
+
+/* ---------- Материали ---------- */
+.side { display: grid; gap: 1.5rem; align-content: start; }
+.muted { color: var(--ink-soft); font-size: .93rem; }
+.opt { font-weight: 400; color: var(--ink-faint); }
+textarea.input { resize: vertical; min-height: 3.2rem; line-height: 1.45; }
+
+.mats { border-radius: var(--radius-lg); transition: background-color .15s ease, outline-color .15s ease; outline: 2px dashed transparent; outline-offset: 6px; }
+.mats.dragging { outline-color: var(--c, var(--focus)); background: var(--tint, var(--sunken)); }
+.mats-actions { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.1rem; }
+.drop-hint { color: var(--ink-faint); font-size: .88rem; }
+@media (hover: none) { .drop-hint { display: none; } }
+
+.mat-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.mat {
+  display: grid; grid-template-columns: 3.4rem 1fr auto; gap: .9rem; align-items: start;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: .85rem 1rem;
+}
+.mat-body { min-width: 0; display: grid; gap: .2rem; }
+.mat-title { font-weight: 600; overflow-wrap: anywhere; }
+.mat-desc { color: var(--ink-soft); font-size: .93rem; }
+.mat-meta { color: var(--ink-faint); font-size: .84rem; display: flex; flex-wrap: wrap; gap: .3rem .6rem; align-items: center; }
+.mat-where { font-size: .86rem; color: var(--c); font-weight: 600; text-decoration: none; }
+.mat-where:hover { text-decoration: underline; }
+.mat-actions { display: flex; gap: .4rem; flex-wrap: wrap; justify-content: flex-end; }
+.mat-actions .btn { min-width: 4.6rem; }
+.only-staff { font-size: .76rem; font-weight: 700; color: var(--gx); border: 1px solid color-mix(in srgb, var(--gx) 45%, transparent); border-radius: 6px; padding: 0 .4rem; }
+
+/* Етикет за вида файл — цвят по категория, без иконки */
+.ftag {
+  display: grid; place-items: center; height: 2.6rem; border-radius: 8px; font-weight: 800; font-size: .74rem; letter-spacing: .02em;
+  color: var(--ft); background: color-mix(in srgb, var(--ft) 13%, var(--surface)); border: 1px solid color-mix(in srgb, var(--ft) 35%, transparent);
+  --ft: var(--ink-soft);
+}
+.ftag[data-t="pdf"] { --ft: var(--danger); }
+.ftag[data-t="pres"] { --ft: var(--g7); }
+.ftag[data-t="doc"] { --ft: var(--g5); }
+.ftag[data-t="sheet"], .ftag[data-t="img"] { --ft: var(--g6); }
+.ftag[data-t="media"], .ftag[data-t="link"] { --ft: var(--gx); }
+.ftag[data-t="map"] { --ft: var(--h-line); }
+
+.mat-list.compact .mat { grid-template-columns: 2.8rem 1fr; padding: .7rem .8rem; gap: .7rem; }
+.mat-list.compact .ftag { height: 2.2rem; font-size: .68rem; }
+.mat-list.compact .mat-actions { grid-column: 2; justify-content: flex-start; }
+.mat-list.compact .mat-desc { display: none; }
+
+@media (max-width: 640px) {
+  .mat { grid-template-columns: 2.8rem 1fr; }
+  .ftag { height: 2.2rem; font-size: .68rem; }
+  .mat-actions { grid-column: 2; justify-content: flex-start; }
+}
+
+.progress { position: relative; height: 2.2rem; border-radius: 8px; background: var(--sunken); overflow: hidden; }
+.progress .bar { position: absolute; inset: 0 auto 0 0; width: 0; background: color-mix(in srgb, var(--c, var(--focus)) 35%, transparent); transition: width .2s ease; }
+.progress .ptext { position: relative; display: grid; place-items: center; height: 100%; font-size: .9rem; font-weight: 600; }
+.progress[hidden] { display: none; }
+input[type="file"].input { padding: .55rem; }

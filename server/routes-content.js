@@ -1,6 +1,7 @@
 // Учебно съдържание: класове → теми → уроци; школи и състезания; връзки
 import { json, fail } from './http.js';
 import { currentUser, requireActive } from './auth.js';
+import { listForSection } from './routes-materials.js';
 
 const FIELDS = 'id, slug, parent_id, kind, grade, code, title, summary, goals, body, sort, updated_at';
 
@@ -31,7 +32,8 @@ export async function overview(env, request) {
 }
 
 export async function section(env, request, slug) {
-  requireActive(await currentUser(env, request));
+  const me = requireActive(await currentUser(env, request));
+  const staff = me.role === 'teacher' || me.role === 'admin' ? 1 : 0;
   const s = await env.DB.prepare(`SELECT ${FIELDS} FROM sections WHERE slug = ?`).bind(slug).first();
   if (!s) fail(404, 'Няма такава страница.');
 
@@ -53,12 +55,15 @@ export async function section(env, request, slug) {
     .all();
   let grand = [];
   if (s.kind === 'grade' && children.length) {
-    const ids = children.map((c) => c.id);
+    // Уроците във всяка тема + колко материала има към всеки
     const { results } = await env.DB.prepare(
-      `SELECT id, slug, parent_id, kind, code, title, sort FROM sections
-        WHERE parent_id IN (${ids.map(() => '?').join(',')}) ORDER BY sort`,
+      `SELECT t.id, t.slug, t.parent_id, t.code, t.title,
+              (SELECT COUNT(*) FROM materials m
+                WHERE m.section_id = t.id AND m.status = 'ready' AND (m.audience = 'all' OR ?2)) AS materials
+         FROM sections t JOIN sections th ON th.id = t.parent_id
+        WHERE th.parent_id = ?1 ORDER BY t.sort`,
     )
-      .bind(...ids)
+      .bind(s.id, staff)
       .all();
     grand = results;
   }
@@ -85,8 +90,11 @@ export async function section(env, request, slug) {
     crumbs,
     children: children.map((c) => ({
       ...shape(c),
-      topics: grand.filter((g) => g.parent_id === c.id).map((g) => ({ slug: g.slug, code: g.code, title: g.title })),
+      topics: grand
+        .filter((g) => g.parent_id === c.id)
+        .map((g) => ({ slug: g.slug, code: g.code, title: g.title, materials: g.materials })),
     })),
+    materials: s.kind === 'topic' || s.kind === 'page' ? await listForSection(env, me, s.id) : [],
     prev,
     next,
   });

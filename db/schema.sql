@@ -61,3 +61,32 @@ CREATE TABLE IF NOT EXISTS links (
   created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Материали към урок или страница: качен файл или линк
+CREATE TABLE IF NOT EXISTS materials (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  section_id   INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL CHECK (kind IN ('file', 'link')),
+  title        TEXT NOT NULL,
+  description  TEXT,
+  url          TEXT,                       -- само за линк
+  file_name    TEXT,
+  mime         TEXT,
+  size         INTEGER,                    -- байтове
+  chunks       INTEGER,                    -- на колко части е разделен файлът
+  audience     TEXT NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'teachers')),
+  status       TEXT NOT NULL DEFAULT 'ready' CHECK (status IN ('uploading', 'ready')),
+  created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS materials_section ON materials (section_id, status);
+CREATE INDEX IF NOT EXISTS materials_recent ON materials (status, created_at);
+
+-- Съдържанието на файловете: части до 900 KB, записани като base64 текст
+CREATE TABLE IF NOT EXISTS material_chunks (
+  material_id  INTEGER NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
+  idx          INTEGER NOT NULL,
+  data         TEXT NOT NULL,
+  PRIMARY KEY (material_id, idx)
+);

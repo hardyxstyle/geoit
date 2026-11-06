@@ -2,6 +2,7 @@
 import { api } from './api.js';
 import { state, go, refreshMe, render, APP_NAME } from './app.js';
 import { esc, $, $$, toast, icon, reliefSvg, animateRelief, plural, classLabel } from './ui.js';
+import { materialsPanel, itemHtml, bindFileActions } from './materials.js';
 
 const gradeKey = (s) => (s.grade ? String(s.grade) : 'x');
 const setTitle = (t) => (document.title = t ? `${t} — ${APP_NAME}` : `${APP_NAME} — география за 5.–7. клас`);
@@ -175,7 +176,11 @@ const legendItem = (s, extra = '') => `
 export function home() {
   return async (main) => {
     setTitle();
-    const [{ sections }, { links }] = await Promise.all([api('/overview'), api('/links')]);
+    const [{ sections }, { links }, { materials: recent }] = await Promise.all([
+      api('/overview'),
+      api('/links'),
+      api('/materials/recent').catch(() => ({ materials: [] })),
+    ]);
     const u = state.user;
     const grades = sections.filter((s) => s.kind === 'grade');
     const areas = sections.filter((s) => s.kind === 'area');
@@ -202,6 +207,13 @@ export function home() {
             ${grades.map((g) => legendItem(g, `${plural(g.grandchildren, 'урок', 'урока')}${u.grade === g.grade && u.role === 'student' ? '<br>твоят клас' : ''}`)).join('')}
             ${areas.map((a) => legendItem(a, plural(a.children, 'раздел', 'раздела'))).join('')}
           </section>
+          <div class="side">
+          <section class="panel recent" aria-labelledby="recent-h">
+            <h2 id="recent-h">Нови материали</h2>
+            ${recent.length
+              ? `<ul class="mat-list compact">${recent.map((m) => itemHtml(m, { showSection: true })).join('')}</ul>`
+              : `<p class="muted">${isStaff() ? 'Още няма качени материали. Отвори урок → „Материали“ → „Качи файл“.' : 'Тук ще се появяват новите материали от учителите.'}</p>`}
+          </section>
           <aside class="panel">
             <h2>Полезни връзки</h2>
             <ul class="linklist">
@@ -209,9 +221,12 @@ export function home() {
             </ul>
             <p style="margin-top:.9rem"><a href="/vrazki">Всички връзки</a></p>
           </aside>
+          </div>
         </div>
       </div>
       ${footer()}`;
+    const recentBox = $('.recent', main);
+    if (recentBox) bindFileActions(recentBox, () => recent);
   };
 }
 
@@ -262,6 +277,7 @@ function gradeView(main, { section: s, children }) {
                   <li><a href="/s/${esc(t.slug)}">
                     <span class="code">${esc(t.code || '')}</span>
                     <span>${esc(t.title)}</span>
+                    <span class="state ${t.materials ? 'has' : ''}">${t.materials ? plural(t.materials, 'материал', 'материала') : ''}</span>
                   </a></li>`).join('')}
               </ol>
             </section>`).join('')}
@@ -321,14 +337,17 @@ const TABS = [
     student: 'Към този урок още няма качени материали.' },
 ];
 
-function topicView(main, { section: s, crumbs, prev, next }) {
+function topicView(main, { section: s, crumbs, prev, next, materials }) {
   const staff = isStaff();
+  let mats = materials || [];
+  const tabLabel = (t) => (t.id === 'materiali' && mats.length ? `${t.label} (${mats.length})` : t.label);
   const bodyHtml = (tab) => {
     if (tab.id === 'urok' && s.body) {
       return `<div class="prose">${s.body.split(/\n{2,}/).map((p) => `<p>${esc(p)}</p>`).join('')}</div>`;
     }
     return `<div class="empty">${icon[tab.icon]}<strong>${esc(tab.label)}</strong><span>${esc(staff ? tab.staff : tab.student)}</span></div>`;
   };
+  const start = TABS.find((t) => '#' + t.id === location.hash) || TABS[0];
 
   main.innerHTML = `
     <div data-c="${gradeKey(s)}">
@@ -339,12 +358,12 @@ function topicView(main, { section: s, crumbs, prev, next }) {
           <div><h1>${esc(s.title)}</h1>${s.summary ? `<p style="color:var(--ink-soft);margin-top:.5rem;max-width:60ch">${esc(s.summary)}</p>` : ''}</div>
         </div>
         <div class="tabs" role="tablist" aria-label="Части на урока">
-          ${TABS.map((t, i) => `<button role="tab" id="tab-${t.id}" aria-controls="panel" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}" data-tab="${t.id}">${t.label}</button>`).join('')}
+          ${TABS.map((t) => `<button role="tab" id="tab-${t.id}" aria-controls="panel" aria-selected="${t === start}" tabindex="${t === start ? 0 : -1}" data-tab="${t.id}">${tabLabel(t)}</button>`).join('')}
         </div>
       </div></header>
       <div class="wrap topic-body">
         <div>
-          <div id="panel" role="tabpanel" aria-labelledby="tab-urok">${bodyHtml(TABS[0])}</div>
+          <div id="panel" role="tabpanel" aria-labelledby="tab-${start.id}"></div>
           <nav class="pager" aria-label="Съседни уроци">
             ${prev ? `<a href="/s/${esc(prev.slug)}"><small>Предишен</small>${esc((prev.code ? prev.code + ' ' : '') + prev.title)}</a>` : ''}
             ${next ? `<a class="next" href="/s/${esc(next.slug)}"><small>Следващ</small>${esc((next.code ? next.code + ' ' : '') + next.title)}</a>` : ''}
@@ -360,14 +379,30 @@ function topicView(main, { section: s, crumbs, prev, next }) {
     ${footer()}`;
 
   const tabs = $$('[role="tab"]', main);
+  const panel = $('#panel', main);
+  const show = (tab) => {
+    panel.setAttribute('aria-labelledby', 'tab-' + tab.id);
+    if (tab.id === 'materiali') {
+      // нов контейнер всеки път, за да не се трупат слушатели
+      panel.innerHTML = '<div></div>';
+      materialsPanel(panel.firstChild, {
+        slug: s.slug,
+        materials: mats,
+        onChange: (list) => {
+          mats = list;
+          $('#tab-materiali', main).textContent = tabLabel(tab);
+        },
+      });
+    } else panel.innerHTML = bodyHtml(tab);
+  };
   const select = (btn) => {
     tabs.forEach((b) => {
       b.setAttribute('aria-selected', b === btn);
       b.tabIndex = b === btn ? 0 : -1;
     });
-    const panel = $('#panel', main);
-    panel.setAttribute('aria-labelledby', btn.id);
-    panel.innerHTML = bodyHtml(TABS.find((t) => t.id === btn.dataset.tab));
+    const tab = TABS.find((t) => t.id === btn.dataset.tab);
+    history.replaceState(history.state, '', location.pathname + location.search + (tab === TABS[0] ? '' : '#' + tab.id));
+    show(tab);
   };
   tabs.forEach((b, i) => {
     b.addEventListener('click', () => select(b));
@@ -379,6 +414,7 @@ function topicView(main, { section: s, crumbs, prev, next }) {
       select(nb);
     });
   });
+  show(start);
 }
 
 // ---------- Връзки ----------

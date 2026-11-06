@@ -3,6 +3,7 @@ import { json, HttpError } from '../../server/http.js';
 import * as auth from '../../server/routes-auth.js';
 import * as users from '../../server/routes-users.js';
 import * as content from '../../server/routes-content.js';
+import * as materials from '../../server/routes-materials.js';
 import { ensureDb } from '../../server/setup.js';
 
 // [метод, шаблон, обработчик]; :x хваща част от адреса
@@ -25,6 +26,16 @@ const routes = [
   ['GET', '/api/sections/:slug', content.section],
   ['GET', '/api/links', content.links],
   ['GET', '/api/search', content.search],
+
+  ['GET', '/api/materials', materials.list],
+  ['GET', '/api/materials/recent', materials.recent],
+  ['GET', '/api/materials/storage', materials.storage],
+  ['POST', '/api/materials', materials.create],
+  ['POST', '/api/materials/:id/chunks', materials.putChunk],
+  ['POST', '/api/materials/:id/finish', materials.finish],
+  ['GET', '/api/materials/:id/chunks/:idx', materials.getChunk],
+  ['PATCH', '/api/materials/:id', materials.update],
+  ['DELETE', '/api/materials/:id', materials.remove],
 ];
 
 function match(pattern, path) {
