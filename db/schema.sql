@@ -1,0 +1,63 @@
+-- ГеоКомпас — схема на базата (Cloudflare D1 / SQLite)
+-- Сайтът създава тези таблици сам при първото отваряне (виж server/setup.js)
+
+
+-- Потребители: ученици, учители, админ
+CREATE TABLE IF NOT EXISTS users (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  email                 TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  name                  TEXT NOT NULL,
+  password_hash         TEXT NOT NULL,
+  password_salt         TEXT NOT NULL,
+  role                  TEXT NOT NULL CHECK (role IN ('student', 'teacher', 'admin')),
+  status                TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'blocked')),
+  grade                 INTEGER CHECK (grade IS NULL OR grade BETWEEN 5 AND 7),
+  class_letter          TEXT,
+  must_change_password  INTEGER NOT NULL DEFAULT 0,
+  approved_by           INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  approved_at           TEXT,
+  last_login_at         TEXT,
+  created_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS users_status_role ON users (status, role);
+
+-- Сесии (бисквитка с произволен токен; в базата пазим само хеша му)
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash  TEXT PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at  INTEGER NOT NULL,            -- unix време в ms
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id);
+
+-- Дърво на съдържанието:
+--   grade (5., 6., 7. клас) → theme (тема от програмата) → topic (подтема / урок)
+--   area (Школи, състезания, олимпиади) → page
+CREATE TABLE IF NOT EXISTS sections (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug        TEXT NOT NULL UNIQUE,
+  parent_id   INTEGER REFERENCES sections(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL CHECK (kind IN ('grade', 'theme', 'topic', 'area', 'page')),
+  grade       INTEGER,
+  code        TEXT,                        -- номерация по програмата, напр. 1.3
+  title       TEXT NOT NULL,
+  summary     TEXT,                        -- едно-две изречения за темата
+  goals       TEXT,                        -- JSON масив: „Какво ще научиш“
+  body        TEXT,                        -- съдържание на урока (стъпка 2: редактор)
+  sort        INTEGER NOT NULL DEFAULT 0,
+  updated_at  TEXT,
+  updated_by  INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS sections_parent ON sections (parent_id, sort);
+
+-- Полезни връзки (външни сайтове)
+CREATE TABLE IF NOT EXISTS links (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  category     TEXT NOT NULL,
+  title        TEXT NOT NULL,
+  url          TEXT NOT NULL,
+  description  TEXT,
+  sort         INTEGER NOT NULL DEFAULT 0,
+  created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
