@@ -3,13 +3,13 @@
 import { json, fail, readJson, clean } from './http.js';
 import { currentUser, requireActive, requireStaff } from './auth.js';
 
-export const CHUNK = 900 * 1024; // байта в една част
+// Малки части: безплатният план на Cloudflare дава само 10 ms процесорно време на заявка
+export const CHUNK = 256 * 1024; // байта в една част
 export const MAX_FILE = 25 * 1024 * 1024; // 25 MB на файл
 export const TOTAL_LIMIT = 300 * 1024 * 1024; // общо място за файлове (базата е до 500 MB)
 
 // Файлове, които могат да навредят на училищните компютри
 const BLOCKED = /\.(exe|msi|bat|cmd|com|scr|pif|vbs|vbe|js|jse|wsf|wsh|ps1|sh|apk|app|dmg|jar|html?|xhtml|php|hta|lnk|reg|cpl)$/i;
-const B64 = /^[A-Za-z0-9+/]*={0,2}$/;
 
 const isStaff = (u) => u.role === 'teacher' || u.role === 'admin';
 const canEdit = (u, m) => u.role === 'admin' || (m.created_by !== null && m.created_by === u.id);
@@ -143,16 +143,16 @@ export async function create(env, request) {
   const mime = clean(b.mime, 100) || 'application/octet-stream';
   const chunks = Math.ceil(size / CHUNK);
   const res = await env.DB.prepare(
-    `INSERT INTO materials (section_id, kind, title, description, file_name, mime, size, chunks, audience, status, created_by)
-     VALUES (?, 'file', ?, ?, ?, ?, ?, ?, ?, 'uploading', ?)`,
+    `INSERT INTO materials (section_id, kind, title, description, file_name, mime, size, chunks, chunk_size, audience, status, created_by)
+     VALUES (?, 'file', ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?)`,
   )
-    .bind(section.id, meta.title, meta.description, fileName, mime, size, chunks, meta.audience, me.id)
+    .bind(section.id, meta.title, meta.description, fileName, mime, size, chunks, CHUNK, meta.audience, me.id)
     .run();
   return json({ id: res.meta.last_row_id, chunkSize: CHUNK, chunks }, 201);
 }
 
 async function loadOwnUpload(env, me, id) {
-  const m = await env.DB.prepare('SELECT id, created_by, status, size, chunks FROM materials WHERE id = ? AND kind = ?')
+  const m = await env.DB.prepare('SELECT id, created_by, status, size, chunks, chunk_size FROM materials WHERE id = ? AND kind = ?')
     .bind(Number(id), 'file')
     .first();
   if (!m) fail(404, 'Няма такъв файл.');
@@ -163,15 +163,15 @@ async function loadOwnUpload(env, me, id) {
 
 const b64Bytes = (s) => (s.length / 4) * 3 - (s.endsWith('==') ? 2 : s.endsWith('=') ? 1 : 0);
 
-export async function putChunk(env, request, id) {
+// Една част като base64 текст в тялото на заявката (без JSON — по-малко работа за сървъра)
+export async function putChunk(env, request, id, idx) {
   const me = requireStaff(await currentUser(env, request));
   const m = await loadOwnUpload(env, me, id);
-  const b = await readJson(request);
-  const index = Number(b.index);
+  const index = Number(idx);
   if (!Number.isInteger(index) || index < 0 || index >= m.chunks) fail(400, 'Невалидна част от файла.');
-  const data = typeof b.data === 'string' ? b.data : '';
-  const expected = index === m.chunks - 1 ? m.size - CHUNK * index : CHUNK;
-  if (b64Bytes(data) !== expected || !B64.test(data)) fail(400, 'Част от файла пристигна повредена. Опитай пак.');
+  const data = await request.text();
+  const expected = index === m.chunks - 1 ? m.size - m.chunk_size * index : m.chunk_size;
+  if (data.length % 4 !== 0 || b64Bytes(data) !== expected) fail(400, 'Част от файла пристигна повредена. Опитай пак.');
   await env.DB.prepare('INSERT OR REPLACE INTO material_chunks (material_id, idx, data) VALUES (?, ?, ?)')
     .bind(m.id, index, data)
     .run();

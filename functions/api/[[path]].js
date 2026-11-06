@@ -31,7 +31,7 @@ const routes = [
   ['GET', '/api/materials/recent', materials.recent],
   ['GET', '/api/materials/storage', materials.storage],
   ['POST', '/api/materials', materials.create],
-  ['POST', '/api/materials/:id/chunks', materials.putChunk],
+  ['POST', '/api/materials/:id/chunks/:idx', materials.putChunk],
   ['POST', '/api/materials/:id/finish', materials.finish],
   ['GET', '/api/materials/:id/chunks/:idx', materials.getChunk],
   ['PATCH', '/api/materials/:id', materials.update],
@@ -52,8 +52,11 @@ function match(pattern, path) {
 
 export async function onRequest({ request, env }) {
   const path = new URL(request.url).pathname.replace(/\/+$/, '');
-  // Всяка промяна идва като JSON — защита от заявки, пуснати от чужди сайтове (CSRF)
-  if (request.method !== 'GET' && !(request.headers.get('content-type') || '').includes('application/json')) {
+  // Всяка промяна идва като JSON или с наш заглавен ред — браузърът не позволява
+  // на чужди сайтове да пращат такива заявки без разрешение (защита от CSRF)
+  const isJson = (request.headers.get('content-type') || '').includes('application/json');
+  const ours = request.headers.get('x-requested-with') === 'geokompas';
+  if (request.method !== 'GET' && !isJson && !ours) {
     return json({ error: 'Заявката трябва да е JSON.' }, 415);
   }
   try {

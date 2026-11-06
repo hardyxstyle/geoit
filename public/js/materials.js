@@ -1,5 +1,5 @@
 // Материали: списък, качване, линкове, отваряне и изтегляне
-import { api } from './api.js';
+import { api, ApiError, errorText } from './api.js';
 import { state } from './app.js';
 import { esc, $, toast, formatDate } from './ui.js';
 
@@ -50,9 +50,9 @@ async function fetchFile(m, onProgress) {
   if (cache.has(m.id)) return cache.get(m.id);
   const parts = new Array(m.chunks);
   let done = 0;
-  await pool(m.chunks, 3, async (i) => {
+  await pool(m.chunks, 4, async (i) => {
     const res = await fetch(`/api/materials/${m.id}/chunks/${i}`, { credentials: 'same-origin' });
-    if (!res.ok) throw new Error('Файлът не можа да се изтегли. Опитай пак.');
+    if (!res.ok) throw new Error(`Файлът не можа да се изтегли (грешка ${res.status}). Опитай пак.`);
     const b64 = await res.text();
     parts[i] = await (await fetch('data:application/octet-stream;base64,' + b64)).arrayBuffer();
     onProgress(++done / m.chunks);
@@ -115,6 +115,24 @@ async function retry(fn, times = 3) {
   }
 }
 
+async function sendChunk(id, index, data) {
+  let res;
+  try {
+    res = await fetch(`/api/materials/${id}/chunks/${index}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'text/plain', 'x-requested-with': 'geokompas' },
+      body: data,
+    });
+  } catch {
+    throw new ApiError(0, 'Връзката прекъсна. Провери интернета и опитай пак.');
+  }
+  if (!res.ok) {
+    const j = await res.json().catch(() => null);
+    throw new ApiError(res.status, j?.error || errorText(res.status));
+  }
+}
+
 async function uploadFile(section, file, meta, onProgress) {
   const { id, chunkSize, chunks } = await api('/materials', {
     method: 'POST',
@@ -122,9 +140,9 @@ async function uploadFile(section, file, meta, onProgress) {
   });
   try {
     let done = 0;
-    await pool(chunks, 3, async (i) => {
+    await pool(chunks, 4, async (i) => {
       const data = await toBase64(file.slice(i * chunkSize, Math.min(file.size, (i + 1) * chunkSize)));
-      await retry(() => api(`/materials/${id}/chunks`, { method: 'POST', body: { index: i, data } }));
+      await retry(() => sendChunk(id, i, data));
       onProgress(++done / chunks);
     });
     await retry(() => api(`/materials/${id}/finish`, { method: 'POST' }));

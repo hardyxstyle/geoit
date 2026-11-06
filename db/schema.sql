@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS materials (
   mime         TEXT,
   size         INTEGER,                    -- байтове
   chunks       INTEGER,                    -- на колко части е разделен файлът
+  chunk_size   INTEGER,                    -- байта в една част
   audience     TEXT NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'teachers')),
   status       TEXT NOT NULL DEFAULT 'ready' CHECK (status IN ('uploading', 'ready')),
   created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -83,7 +84,7 @@ CREATE TABLE IF NOT EXISTS materials (
 CREATE INDEX IF NOT EXISTS materials_section ON materials (section_id, status);
 CREATE INDEX IF NOT EXISTS materials_recent ON materials (status, created_at);
 
--- Съдържанието на файловете: части до 900 KB, записани като base64 текст
+-- Съдържанието на файловете: части до 256 KB, записани като base64 текст
 CREATE TABLE IF NOT EXISTS material_chunks (
   material_id  INTEGER NOT NULL REFERENCES materials(id) ON DELETE CASCADE,
   idx          INTEGER NOT NULL,
