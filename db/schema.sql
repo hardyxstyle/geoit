@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS sections (
   body        TEXT,                        -- текстът на урока (HTML от редактора)
   body_text   TEXT,                        -- същият текст без форматиране — за търсенето
   sort        INTEGER NOT NULL DEFAULT 0,
+  lesson_type TEXT,                        -- pregovor | kontrol | deinosti | obobshtenie (иначе нов урок)
   updated_at  TEXT,
   updated_by  INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
@@ -165,3 +166,9 @@ CREATE TABLE IF NOT EXISTS lesson_views (
   PRIMARY KEY (user_id, section_id)
 );
 CREATE INDEX IF NOT EXISTS lesson_views_section ON lesson_views (section_id);
+
+-- Служебни стойности, напр. коя версия на структурата на уроците е приложена
+CREATE TABLE IF NOT EXISTS meta (
+  key    TEXT PRIMARY KEY,
+  value  TEXT
+);

@@ -356,6 +356,14 @@ a.legend-item:hover { background: var(--tint, var(--sunken)); }
 .topics a:hover { background: var(--tint); }
 .topics .code { font-variant-numeric: tabular-nums; color: var(--c); font-weight: 700; font-size: .9rem; }
 .topics .state { font-size: .8rem; color: var(--ink-faint); }
+.ltype {
+  display: inline-block; vertical-align: .1em; margin-left: .35rem; padding: .05rem .5rem; border-radius: 999px;
+  font-size: .72rem; font-weight: 600; letter-spacing: .01em; white-space: nowrap;
+  color: var(--ink-soft); border: 1px solid var(--line); background: var(--paper, transparent);
+}
+.ltype[data-t="kontrol"] { color: var(--c); border-color: var(--c); }
+.ltype-row { margin-top: .5rem; }
+.ltype-row .ltype { margin-left: 0; font-size: .8rem; }
 .topics .state.has { color: var(--ok); }
 
 /* ---------- Урок ---------- */

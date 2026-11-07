@@ -253,6 +253,16 @@ const crumbsHtml = (crumbs, current) => `
     <li aria-current="page">${esc(current)}</li>
   </ol>`;
 
+// Вид на урока по учебника (новите уроци нямат етикет)
+const LESSON_TYPES = {
+  pregovor: ['Преговор', 'Урок за преговор'],
+  kontrol: ['Контрол', 'Урок за контрол'],
+  deinosti: ['Дейности', 'Урок за дейности'],
+  obobshtenie: ['Обобщение', 'Урок за обобщение'],
+};
+const typeTag = (t, long = false) =>
+  LESSON_TYPES[t.lessonType] ? ` <span class="ltype" data-t="${esc(t.lessonType)}">${LESSON_TYPES[t.lessonType][long ? 1 : 0]}</span>` : '';
+
 // Какво пише вдясно на всеки урок в списъка
 function topicState(t) {
   if (isStaff()) {
@@ -292,7 +302,7 @@ function gradeView(main, { section: s, children }) {
                 ${c.topics.map((t) => `
                   <li><a href="/s/${esc(t.slug)}">
                     <span class="code">${esc(t.code || '')}</span>
-                    <span>${esc(t.title)}</span>
+                    <span>${esc(t.title)}${typeTag(t)}</span>
                     ${topicState(t)}
                   </a></li>`).join('')}
               </ol>
@@ -313,7 +323,7 @@ function themeView(main, { section: s, crumbs, children }) {
       </div></header>
       <div class="wrap" style="padding:2rem 0 3rem; max-width:820px">
         <ol class="topics">
-          ${children.map((t) => `<li><a href="/s/${esc(t.slug)}"><span class="code">${esc(t.code || '')}</span><span>${esc(t.title)}</span></a></li>`).join('')}
+          ${children.map((t) => `<li><a href="/s/${esc(t.slug)}"><span class="code">${esc(t.code || '')}</span><span>${esc(t.title)}${typeTag(t)}</span></a></li>`).join('')}
         </ol>
       </div>
     </div>
@@ -361,7 +371,7 @@ function topicView(main, { section: s, crumbs, prev, next, materials, quizzes, t
         ${crumbsHtml(crumbs, s.title)}
         <div class="title-row">
           ${s.code ? `<span class="bigcode" aria-hidden="true">${esc(s.code)}</span>` : ''}
-          <div><h1>${esc(s.title)}</h1>${s.summary ? `<p style="color:var(--ink-soft);margin-top:.5rem;max-width:60ch">${esc(s.summary)}</p>` : ''}</div>
+          <div><h1>${esc(s.title)}</h1>${typeTag(s, true) ? `<p class="ltype-row">${typeTag(s, true)}</p>` : ''}${s.summary ? `<p style="color:var(--ink-soft);margin-top:.5rem;max-width:60ch">${esc(s.summary)}</p>` : ''}</div>
         </div>
         <div class="tabs" role="tablist" aria-label="Части на урока">
           ${TABS.map((t) => `<button role="tab" id="tab-${t.id}" aria-controls="panel" aria-selected="${t === start}" tabindex="${t === start ? 0 : -1}" data-tab="${t.id}">${tabLabel(t)}</button>`).join('')}

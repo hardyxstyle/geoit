@@ -5,7 +5,7 @@ import { listForSection } from './routes-materials.js';
 import { listForSection as quizzesFor } from './routes-quizzes.js';
 
 // Без текста на урока — той може да е голям (снимки), четем го само когато трябва
-const LIST_FIELDS = 'id, slug, parent_id, kind, grade, code, title, summary, goals, sort, updated_at';
+const LIST_FIELDS = 'id, slug, parent_id, kind, grade, code, title, summary, goals, sort, lesson_type, updated_at';
 const FIELDS = `${LIST_FIELDS}, body, (SELECT name FROM users WHERE users.id = sections.updated_by) AS updated_by_name`;
 
 export const MAX_BODY = 1_500_000; // знака — около 1,5 MB, с вградените снимки
@@ -20,6 +20,7 @@ const shape = (s) =>
     grade: s.grade,
     code: s.code,
     title: s.title,
+    lessonType: s.lesson_type || null,
     summary: s.summary,
     goals: s.goals ? JSON.parse(s.goals) : [],
     body: s.body ?? null,
@@ -65,7 +66,7 @@ export async function section(env, request, slug) {
   if (s.kind === 'grade' && children.length) {
     // Уроците във всяка тема + колко материала има към всеки
     const { results } = await env.DB.prepare(
-      `SELECT t.id, t.slug, t.parent_id, t.code, t.title,
+      `SELECT t.id, t.slug, t.parent_id, t.code, t.title, t.lesson_type,
               (SELECT COUNT(*) FROM materials m
                 WHERE m.section_id = t.id AND m.status = 'ready' AND (m.audience = 'all' OR ?2)) AS materials,
               (SELECT COUNT(*) FROM quizzes q WHERE q.section_id = t.id AND (q.status = 'published' OR ?2)) AS quizzes,
@@ -105,7 +106,7 @@ export async function section(env, request, slug) {
       topics: grand
         .filter((g) => g.parent_id === c.id)
         .map((g) => ({
-          slug: g.slug, code: g.code, title: g.title, materials: g.materials, quizzes: g.quizzes,
+          slug: g.slug, code: g.code, title: g.title, lessonType: g.lesson_type || null, materials: g.materials, quizzes: g.quizzes,
           ...(staff ? {} : { seen: !!g.seen, best: g.best }),
         })),
     })),

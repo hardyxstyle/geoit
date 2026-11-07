@@ -2,6 +2,7 @@
 import { api } from './api.js';
 import { state } from './app.js';
 import { esc, $, toast, formatDate, loadScript, loadCss, sanitizeHtml, shrinkImage, setUnsaved, pickFile } from './ui.js';
+import { looksLikeMarkdown, markdownToHtml } from './markdown.js';
 
 const QUILL_JS = '/vendor/quill-2.0.3.js';
 const QUILL_CSS = '/vendor/quill-2.0.3.snow.css';
@@ -146,6 +147,25 @@ export function textBlock(root, tools, { slug, tab, text, onMode }) {
       tipInput.dataset.link = 'https://';
       tipInput.dataset.video = 'Линк от YouTube';
     }
+    // Текст от Gemini/ChatGPT идва като Markdown („## Заглавие“, „**удебелен**“) — превръщаме го във форматиран
+    quill.root.addEventListener(
+      'paste',
+      async (e) => {
+        const cd = e.clipboardData;
+        const plain = cd?.getData('text/plain') || '';
+        const rich = cd?.getData('text/html') || '';
+        if (!looksLikeMarkdown(plain) || /<(h[1-6]|strong|b|li)[\s>]/i.test(rich)) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const range = quill.getSelection(true);
+        if (range.length) quill.deleteText(range.index, range.length, 'user');
+        const before = quill.getLength();
+        quill.clipboard.dangerouslyPasteHTML(range.index, await sanitizeHtml(markdownToHtml(plain)), 'user');
+        quill.setSelection(range.index + quill.getLength() - before, 0, 'user');
+        toast('Текстът е форматиран: заглавия, удебелени думи и списъци.');
+      },
+      true,
+    );
     if (html) quill.clipboard.dangerouslyPasteHTML(await sanitizeHtml(html), 'silent');
     quill.history.clear();
     setDirty(!!note); // внесен Word или стара версия — още не е записано
