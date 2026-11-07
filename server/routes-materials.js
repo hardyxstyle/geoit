@@ -84,6 +84,11 @@ export async function storage(env, request) {
 
 function checkUrl(raw) {
   const url = clean(raw, 1000);
+  // Файл, качен в самия сайт (папка public/files в GitHub)
+  if (url.startsWith('/files/')) {
+    if (url.includes('..') || /[\s<>"'\\]/.test(url)) fail(400, 'Невалиден път до файл от сайта.');
+    return url;
+  }
   let u;
   try {
     u = new URL(url);

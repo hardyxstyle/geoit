@@ -4,7 +4,8 @@
   "description": "ГеоКомпас — платформа по география за 5.–7. клас",
   "scripts": {
     "dev": "wrangler pages dev public --d1 DB --compatibility-date=2025-09-01",
-    "db:build": "node db/build-seed.mjs"
+    "db:build": "node db/build-seed.mjs",
+    "build": "node scripts/files-index.mjs"
   },
   "license": "ISC",
   "devDependencies": {

@@ -1,6 +1,6 @@
 // Преглед на файлове и линкове направо в сайта (в същия прозорец)
 import { esc, loadScript, sanitizeHtml, toast } from './ui.js';
-import { fetchFile, saveBlob, previewType, embedUrl, fmtSize, host } from './files.js';
+import { fetchFile, saveBlob, previewType, embedUrl, fmtSize, host, isSiteFile, fileNameOf } from './files.js';
 
 const PDF_JS = '/vendor/pdf-3.11.174.min.js';
 const PDF_WORKER = '/vendor/pdf-3.11.174.worker.min.js';
@@ -20,12 +20,12 @@ export async function renderPreview(box, m, { onProgress } = {}) {
   if (!type) {
     box.innerHTML = `<div class="empty"><strong>Този вид файл не може да се покаже тук</strong>
       <span>Изтегли го и го отвори на компютъра. Ако е презентация, по-удобно е да се качи и като PDF — тогава ще се вижда направо в сайта.</span>
-      <button class="btn" type="button" data-dl>Изтегли (${esc(fmtSize(m.size))})</button></div>`;
+      <button class="btn" type="button" data-dl>Изтегли${m.size ? ` (${esc(fmtSize(m.size))})` : ''}</button></div>`;
     box.querySelector('[data-dl]').addEventListener('click', async (e) => {
       const b = e.currentTarget;
       b.disabled = true;
       try {
-        saveBlob(await fetchFile(m, (p) => (b.textContent = `${Math.round(p * 100)}%`)), m.fileName);
+        saveBlob(await fetchFile(m, (p) => (b.textContent = `${Math.round(p * 100)}%`)), fileNameOf(m));
       } catch (err) {
         toast(err.message);
       }
@@ -134,17 +134,18 @@ export function handleViewerPop() {
 
 export function openMaterial(m) {
   // Линк, който не може да се вгради → отваряме го в същия прозорец
-  if (m.kind === 'link' && !embedUrl(m.url)) {
+  const site = isSiteFile(m);
+  if (m.kind === 'link' && !site && !embedUrl(m.url)) {
     location.href = m.url;
     return;
   }
   const d = ensureDialog();
-  const meta = m.kind === 'link' ? host(m.url) : fmtSize(m.size);
+  const meta = site ? 'файл в сайта' : m.kind === 'link' ? host(m.url) : fmtSize(m.size);
   d.innerHTML = `
     <header class="viewer-head">
       <div class="viewer-title"><strong id="viewer-title">${esc(m.title)}</strong><span>${esc(meta)}</span></div>
       <div class="viewer-actions">
-        ${m.kind === 'file' ? '<button class="btn ghost small" type="button" data-v="dl">Изтегли</button>' : `<a class="btn ghost small" href="${esc(m.url)}">Отвори в сайта им</a>`}
+        ${m.kind === 'file' || site ? '<button class="btn ghost small" type="button" data-v="dl">Изтегли</button>' : `<a class="btn ghost small" href="${esc(m.url)}">Отвори в сайта им</a>`}
         <button class="btn small" type="button" data-v="close">Затвори</button>
       </div>
     </header>
@@ -152,7 +153,7 @@ export function openMaterial(m) {
   d.querySelector('[data-v="close"]').addEventListener('click', () => d.close());
   d.querySelector('[data-v="dl"]')?.addEventListener('click', async () => {
     try {
-      saveBlob(await fetchFile(m), m.fileName);
+      saveBlob(await fetchFile(m), fileNameOf(m));
     } catch (err) {
       toast(err.message);
     }

@@ -645,3 +645,15 @@ html.viewer-open { overflow: hidden; }
 .editor-host .ql-snow .ql-tooltip a.ql-action::after { content: 'Промени'; }
 .editor-host .ql-snow .ql-tooltip.ql-editing a.ql-action::after { content: 'Запази'; }
 .editor-host .ql-snow .ql-tooltip a.ql-remove::before { content: 'Махни'; }
+
+/* Избор на файл от сайта */
+.site-files { max-height: 15rem; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: .3rem; display: grid; gap: .15rem; }
+.site-files .muted { padding: .6rem; }
+.site-file { display: flex; gap: .6rem; align-items: flex-start; padding: .45rem .55rem; border-radius: 8px; cursor: pointer; }
+.site-file:hover { background: var(--sunken); }
+.site-file:has(input:checked) { background: var(--tint, var(--sunken)); outline: 2px solid var(--c, var(--focus)); outline-offset: -2px; }
+.site-file input { margin-top: .3rem; accent-color: var(--c, var(--focus)); }
+.site-file span { display: grid; min-width: 0; }
+.site-file strong { font-weight: 600; overflow-wrap: anywhere; }
+.site-file small { color: var(--ink-faint); }
+.mats-actions .btn { white-space: nowrap; }

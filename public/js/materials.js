@@ -2,7 +2,7 @@
 import { api, ApiError, errorText } from './api.js';
 import { state } from './app.js';
 import { esc, $, toast, formatDate } from './ui.js';
-import { fmtSize, kindOf, tagText, host, previewType, pool } from './files.js';
+import { fmtSize, kindOf, tagText, host, previewType, pool, isSiteFile, fileNameOf } from './files.js';
 import { openMaterial, inlinePreview } from './viewer.js';
 
 const isStaff = () => state.user && (state.user.role === 'teacher' || state.user.role === 'admin');
@@ -27,6 +27,9 @@ const EMPTY = {
     student: 'Учителят още не е добавил материали към този урок.',
   },
 };
+
+// „vodi_afrika-urok.pdf“ → „vodi afrika-urok“
+const niceTitle = (name) => name.replace(/\.[^.]+$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
 
 export const typeTag = (m) => `<span class="ftag" data-t="${kindOf(m)}">${esc(tagText(m))}</span>`;
 
@@ -89,16 +92,18 @@ export async function uploadFile(section, file, meta, onProgress = () => {}) {
 
 // ---------- Един ред от списъка ----------
 export function itemHtml(m, { showSection = false, inline = false } = {}) {
-  const meta = [m.author, m.kind === 'link' ? host(m.url) : fmtSize(m.size), formatDate(m.createdAt)].filter(Boolean);
+  const site = isSiteFile(m);
+  const meta = [m.author, site ? 'файл в сайта' : m.kind === 'link' ? host(m.url) : fmtSize(m.size), formatDate(m.createdAt)].filter(Boolean);
   const where =
     showSection && m.section
       ? `<a class="mat-where" href="/s/${esc(m.section.slug)}#${esc(m.tab || 'materiali')}" data-c="${m.section.grade || 'x'}">${m.section.grade ? m.section.grade + ' кл., ' : ''}${esc((m.section.code ? m.section.code + ' ' : '') + m.section.title)}</a>`
       : '';
   const canPreview = !!previewType(m);
-  const showInline = inline && canPreview && m.kind === 'file' && /^(pdf|image|docx)$/.test(previewType(m));
+  const isFile = m.kind === 'file' || site;
+  const showInline = inline && canPreview && isFile && /^(pdf|image|docx)$/.test(previewType(m));
   const actions = [
-    showInline ? '' : `<button class="btn ghost small" type="button" data-m="open" data-id="${m.id}">${canPreview || m.kind === 'link' ? 'Отвори' : 'Изтегли'}</button>`,
-    m.kind === 'file' && (canPreview || showInline) ? `<button class="btn ghost small" type="button" data-m="download" data-id="${m.id}">Изтегли</button>` : '',
+    showInline ? '' : `<button class="btn ghost small" type="button" data-m="open" data-id="${m.id}">${canPreview || !isFile ? 'Отвори' : 'Изтегли'}</button>`,
+    isFile && (canPreview || showInline) ? `<button class="btn ghost small" type="button" data-m="download" data-id="${m.id}">Изтегли</button>` : '',
     m.canEdit && !showSection
       ? `<button class="btn ghost small" type="button" data-m="edit" data-id="${m.id}">Промени</button>
          <button class="btn danger small" type="button" data-m="delete" data-id="${m.id}">Изтрий</button>`
@@ -125,13 +130,13 @@ export function bindFileActions(root, getList) {
     if (!btn) return;
     const m = getList().find((x) => x.id === Number(btn.dataset.id));
     if (!m) return;
-    if (btn.dataset.m === 'open' && (m.kind === 'link' || previewType(m))) return openMaterial(m);
+    if (btn.dataset.m === 'open' && ((m.kind === 'link' && !isSiteFile(m)) || previewType(m))) return openMaterial(m);
     // изтегляне
     const label = btn.textContent;
     btn.disabled = true;
     try {
       const { fetchFile, saveBlob } = await import('./files.js');
-      saveBlob(await fetchFile(m, (p) => (btn.textContent = `${Math.round(p * 100)}%`)), m.fileName);
+      saveBlob(await fetchFile(m, (p) => (btn.textContent = `${Math.round(p * 100)}%`)), fileNameOf(m));
     } catch (err) {
       toast(err.message);
     } finally {
@@ -157,6 +162,7 @@ export function materialsPanel(root, { slug, tab, all, onChange, inline = false,
           <div class="mats-actions">
             <button class="btn ${tab === 'urok' ? 'ghost' : ''}" type="button" data-m="upload">${tab === 'urok' ? 'Качи готов урок (файл)' : 'Качи файл'}</button>
             <button class="btn ghost" type="button" data-m="link">Добави линк</button>
+            <button class="btn ghost" type="button" data-m="site">Файл от сайта</button>
             <span class="drop-hint">или пусни файл тук</span>
           </div>` : ''}
         ${list.length
@@ -184,8 +190,9 @@ export function materialsPanel(root, { slug, tab, all, onChange, inline = false,
   // ---- Диалог за качване / линк / промяна ----
   function openForm(mode, m = null, file = null) {
     const dlg = $('.mdlg', root);
-    const isLink = mode === 'link' || m?.kind === 'link';
-    const title = mode === 'edit' ? 'Промени материала' : isLink ? 'Добави линк' : 'Качи файл';
+    const isSite = mode === 'site' || (m && isSiteFile(m));
+    const isLink = !isSite && (mode === 'link' || m?.kind === 'link');
+    const title = mode === 'edit' ? 'Промени материала' : isSite ? 'Файл от сайта' : isLink ? 'Добави линк' : 'Качи файл';
     const curTab = m?.tab || tab;
     dlg.innerHTML = `
       <h2>${title}</h2>
@@ -195,6 +202,14 @@ export function materialsPanel(root, { slug, tab, all, onChange, inline = false,
             <label for="mf-file">Файл</label>
             <input class="input" id="mf-file" name="file" type="file" required>
             <span class="hint storage-hint">До 25 MB.</span>
+          </div>` : ''}
+        ${isSite ? `
+          <div class="field">
+            <label for="mf-find">Избери файл</label>
+            <input class="input" id="mf-find" type="search" placeholder="Търси по име или папка" autocomplete="off">
+            <div class="site-files" role="listbox" aria-label="Файлове в сайта"><p class="muted">Зареждане…</p></div>
+            <input type="hidden" name="url" value="${esc(m?.url || '')}">
+            <span class="hint">Това са файловете от папка <b>public/files</b> в GitHub. Не заемат място в базата, но са публични — всеки, който има линка, може да ги отвори.</span>
           </div>` : ''}
         ${isLink ? `
           <div class="field"><label for="mf-url">Адрес</label>
@@ -227,8 +242,40 @@ export function materialsPanel(root, { slug, tab, all, onChange, inline = false,
     const titleInput = $('#mf-title', form);
     let busy = false;
 
+    if (isSite) {
+      const box = $('.site-files', form);
+      const hidden = form.querySelector('input[name="url"]');
+      fetch('/files/index.json', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : { files: [] }))
+        .catch(() => ({ files: [] }))
+        .then(({ files }) => {
+          const draw = (q = '') => {
+            const list = files.filter((f) => (f.folder + ' ' + f.name).toLowerCase().includes(q.toLowerCase()));
+            box.innerHTML = list.length
+              ? list.map((f) => `
+                  <label class="site-file">
+                    <input type="radio" name="sitefile" value="${esc(f.path)}" ${f.path === hidden.value ? 'checked' : ''}>
+                    <span><strong>${esc(f.name)}</strong><small>${esc([f.folder, fmtSize(f.size)].filter(Boolean).join(', '))}</small></span>
+                  </label>`).join('')
+              : `<p class="muted">${files.length ? 'Няма файл с такова име.' : 'Още няма файлове в сайта. Качи ги в папка public/files в GitHub и изчакай 1–2 минути.'}</p>`;
+          };
+          draw();
+          $('#mf-find', form).addEventListener('input', (e) => draw(e.target.value));
+          box.addEventListener('change', (e) => {
+            const f = files.find((x) => x.path === e.target.value);
+            if (!f) return;
+            hidden.value = f.path;
+            if (!titleInput.value.trim() || titleInput.dataset.auto) {
+              titleInput.value = niceTitle(f.name);
+              titleInput.dataset.auto = '1';
+            }
+          });
+          titleInput.addEventListener('input', () => delete titleInput.dataset.auto);
+        });
+    }
+
     const pickName = (f) => {
-      if (f && !titleInput.value.trim()) titleInput.value = f.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
+      if (f && !titleInput.value.trim()) titleInput.value = niceTitle(f.name);
     };
     if (fileInput) {
       if (file) {
@@ -262,9 +309,10 @@ export function materialsPanel(root, { slug, tab, all, onChange, inline = false,
         if (mode === 'edit') {
           await api('/materials/' + m.id, { method: 'PATCH', body: { ...meta, url: data.url } });
           toast('Промените са запазени.');
-        } else if (isLink) {
+        } else if (isLink || isSite) {
+          if (isSite && !data.url) throw new Error('Избери файл от списъка.');
           await api('/materials', { method: 'POST', body: { ...meta, section: slug, kind: 'link', url: data.url } });
-          toast('Линкът е добавен.');
+          toast(isSite ? 'Файлът е добавен.' : 'Линкът е добавен.');
         } else {
           const f = fileInput.files[0];
           if (!f) throw new Error('Избери файл.');
@@ -289,7 +337,7 @@ export function materialsPanel(root, { slug, tab, all, onChange, inline = false,
       }
     });
     dlg.showModal();
-    (fileInput && !file ? fileInput : isLink && !m ? $('#mf-url', form) : titleInput).focus();
+    (fileInput && !file ? fileInput : isSite && !m ? $('#mf-find', form) : isLink && !m ? $('#mf-url', form) : titleInput).focus();
   }
 
   function confirmDelete(m) {
@@ -320,6 +368,7 @@ export function materialsPanel(root, { slug, tab, all, onChange, inline = false,
     const act = btn.dataset.m;
     if (act === 'upload') openForm('upload');
     else if (act === 'link') openForm('link');
+    else if (act === 'site') openForm('site');
     else if (act === 'edit' && m) openForm('edit', m);
     else if (act === 'delete' && m) confirmDelete(m);
   });
