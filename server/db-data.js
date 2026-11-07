@@ -11,8 +11,16 @@ export const schema = [
  "CREATE INDEX IF NOT EXISTS materials_section ON materials (section_id, status)",
  "CREATE INDEX IF NOT EXISTS materials_recent ON materials (status, created_at)",
  "CREATE TABLE IF NOT EXISTS material_chunks ( material_id INTEGER NOT NULL REFERENCES materials(id) ON DELETE CASCADE, idx INTEGER NOT NULL, data TEXT NOT NULL, PRIMARY KEY (material_id, idx) )",
- "CREATE TABLE IF NOT EXISTS section_revisions ( id INTEGER PRIMARY KEY AUTOINCREMENT, section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE, body TEXT, body_text TEXT, updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL, updated_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')) )",
- "CREATE INDEX IF NOT EXISTS section_revisions_section ON section_revisions (section_id, id)"
+ "CREATE TABLE IF NOT EXISTS section_revisions ( id INTEGER PRIMARY KEY AUTOINCREMENT, section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE, tab TEXT NOT NULL DEFAULT 'urok', body TEXT, body_text TEXT, updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL, updated_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')) )",
+ "CREATE INDEX IF NOT EXISTS section_revisions_section ON section_revisions (section_id, id)",
+ "CREATE TABLE IF NOT EXISTS tab_texts ( section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE, tab TEXT NOT NULL, body TEXT, body_text TEXT, updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL, updated_at TEXT, PRIMARY KEY (section_id, tab) )",
+ "CREATE TABLE IF NOT EXISTS quizzes ( id INTEGER PRIMARY KEY AUTOINCREMENT, section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE, tab TEXT NOT NULL DEFAULT 'zadachi', title TEXT NOT NULL, intro TEXT, questions TEXT NOT NULL, max_attempts INTEGER, show_answers INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')), created_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL, updated_at TEXT )",
+ "CREATE INDEX IF NOT EXISTS quizzes_section ON quizzes (section_id, status)",
+ "CREATE TABLE IF NOT EXISTS quiz_attempts ( id INTEGER PRIMARY KEY AUTOINCREMENT, quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, answers TEXT NOT NULL, results TEXT NOT NULL, score REAL NOT NULL, max_score REAL NOT NULL, pending INTEGER NOT NULL DEFAULT 0, feedback TEXT, reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL, reviewed_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')) )",
+ "CREATE INDEX IF NOT EXISTS quiz_attempts_quiz ON quiz_attempts (quiz_id, user_id)",
+ "CREATE INDEX IF NOT EXISTS quiz_attempts_user ON quiz_attempts (user_id, created_at)",
+ "CREATE TABLE IF NOT EXISTS lesson_views ( user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, section_id INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE, first_at TEXT NOT NULL DEFAULT (datetime('now')), last_at TEXT NOT NULL DEFAULT (datetime('now')), views INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (user_id, section_id) )",
+ "CREATE INDEX IF NOT EXISTS lesson_views_section ON lesson_views (section_id)"
 ];
 
 export const seed = [

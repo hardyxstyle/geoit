@@ -4,6 +4,8 @@ import * as auth from '../../server/routes-auth.js';
 import * as users from '../../server/routes-users.js';
 import * as content from '../../server/routes-content.js';
 import * as materials from '../../server/routes-materials.js';
+import * as quizzes from '../../server/routes-quizzes.js';
+import * as progress from '../../server/routes-progress.js';
 import { ensureDb } from '../../server/setup.js';
 
 // [метод, шаблон, обработчик]; :x хваща част от адреса
@@ -24,11 +26,27 @@ const routes = [
 
   ['GET', '/api/overview', content.overview],
   ['GET', '/api/sections/:slug', content.section],
-  ['PUT', '/api/sections/:slug/body', content.saveBody],
-  ['GET', '/api/sections/:slug/revisions', content.revisions],
-  ['GET', '/api/sections/:slug/revisions/:id', content.revision],
+  ['PUT', '/api/sections/:slug/text/:tab', content.saveText],
+  ['GET', '/api/sections/:slug/text/:tab/revisions', content.revisions],
+  ['GET', '/api/sections/:slug/text/:tab/revisions/:id', content.revision],
   ['GET', '/api/links', content.links],
   ['GET', '/api/search', content.search],
+
+  ['POST', '/api/sections/:slug/view', progress.view],
+
+  ['POST', '/api/quizzes', quizzes.create],
+  ['GET', '/api/quizzes/:id', quizzes.get],
+  ['PUT', '/api/quizzes/:id', quizzes.update],
+  ['DELETE', '/api/quizzes/:id', quizzes.remove],
+  ['GET', '/api/quizzes/:id/take', quizzes.take],
+  ['POST', '/api/quizzes/:id/submit', quizzes.submit],
+  ['GET', '/api/quizzes/:id/results', quizzes.results],
+  ['GET', '/api/attempts/:id', quizzes.attempt],
+  ['POST', '/api/attempts/:id/review', quizzes.review],
+
+  ['GET', '/api/progress', progress.classProgress],
+  ['GET', '/api/progress/me', progress.mine],
+  ['GET', '/api/progress/students/:id', progress.student],
 
   ['GET', '/api/materials', materials.list],
   ['GET', '/api/materials/recent', materials.recent],

@@ -148,7 +148,7 @@ export function bindFileActions(root, getList) {
 
 // ---------- Панел с материали за един таб ----------
 // all — всички материали на урока; панелът показва само тези от своя таб
-export function materialsPanel(root, { slug, tab, all, onChange, inline = false, compactEmpty = false }) {
+export function materialsPanel(root, { slug, tab, all, onChange, inline = false, compactEmpty = false, actions = true, quietEmpty = false }) {
   let everything = all;
   const staff = isStaff();
   const mine = () => everything.filter((m) => (m.tab || 'materiali') === tab);
@@ -158,7 +158,7 @@ export function materialsPanel(root, { slug, tab, all, onChange, inline = false,
     const empty = staff ? EMPTY[tab].staff : EMPTY[tab].student;
     root.innerHTML = `
       <div class="mats">
-        ${staff ? `
+        ${staff && actions ? `
           <div class="mats-actions">
             <button class="btn ${tab === 'urok' ? 'ghost' : ''}" type="button" data-m="upload">${tab === 'urok' ? 'Качи готов урок (файл)' : 'Качи файл'}</button>
             <button class="btn ghost" type="button" data-m="link">Добави линк</button>
@@ -167,7 +167,9 @@ export function materialsPanel(root, { slug, tab, all, onChange, inline = false,
           </div>` : ''}
         ${list.length
           ? `<ul class="mat-list">${list.map((m) => itemHtml(m, { inline })).join('')}</ul>`
-          : compactEmpty
+          : quietEmpty
+            ? ''
+            : compactEmpty
             ? (staff ? `<p class="muted">${esc(empty)}</p>` : '')
             : `<div class="empty"><strong>Още няма нищо тук</strong><span>${esc(empty)}</span></div>`}
       </div>

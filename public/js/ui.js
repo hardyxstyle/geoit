@@ -208,3 +208,24 @@ export async function shrinkImage(blob, max = 1280, quality = 0.82) {
     URL.revokeObjectURL(url);
   }
 }
+
+// ---------- Незапазени промени (редактор, тест) ----------
+const unsaved = new Set();
+export const setUnsaved = (key, on) => (on ? unsaved.add(key) : unsaved.delete(key));
+export const hasUnsaved = () => unsaved.size > 0;
+export const confirmLeave = () => !hasUnsaved() || window.confirm('Имаш незапазени промени. Да ги изоставя ли?');
+window.addEventListener('beforeunload', (e) => {
+  if (unsaved.size) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+export const pickFile = (accept) =>
+  new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.addEventListener('change', () => resolve(input.files[0] || null));
+    input.click();
+  });

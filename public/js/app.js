@@ -4,7 +4,9 @@ import { esc, $, icon, initials, roleName, classLabel } from './ui.js';
 import * as views from './views.js';
 import { usersView } from './users.js';
 import { handleViewerPop } from './viewer.js';
-import { hasUnsavedLesson } from './lesson.js';
+import { progressView, studentProgressView } from './progress.js';
+import { attemptView } from './quiz.js';
+import { confirmLeave } from './ui.js';
 
 export const APP_NAME = 'ГеоКомпас';
 
@@ -38,6 +40,7 @@ function renderTopbar() {
         <a href="/s/klas-6" data-c="6" ${cur('/s/klas-6')}><span class="dot"></span>6. клас</a>
         <a href="/s/klas-7" data-c="7" ${cur('/s/klas-7')}><span class="dot"></span>7. клас</a>
         <a href="/s/shkoli" data-c="x" ${cur('/s/shkoli')}><span class="dot"></span>Школи и състезания</a>
+        <a href="/napredak" ${cur('/napredak')}>Напредък</a>
         <a href="/vrazki" ${cur('/vrazki')}>Връзки</a>
         <a href="/tarsene" class="mobile-only" ${cur('/tarsene')}>Търсене</a>
       </nav>`
@@ -81,6 +84,9 @@ const routes = [
   [/^\/vrazki$/, () => views.links(), 'active'],
   [/^\/tarsene$/, () => views.search(), 'active'],
   [/^\/s\/([a-z0-9-]+)$/, (m) => views.section(m[1]), 'active'],
+  [/^\/napredak$/, () => progressView(), 'active'],
+  [/^\/napredak\/uchenik\/(\d+)$/, (m) => studentProgressView(m[1]), 'staff'],
+  [/^\/opit\/(\d+)$/, (m) => attemptView(m[1]), 'active'],
 ];
 
 export async function render() {
@@ -121,7 +127,7 @@ document.addEventListener('click', async (e) => {
   if (a && a.origin === location.origin && !a.target && !a.hasAttribute('download') && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
     if (a.pathname.startsWith('/api/')) return;
     e.preventDefault();
-    if (hasUnsavedLesson() && !window.confirm('Имаш незапазени промени в урока. Да ги изоставя ли?')) return;
+    if (!confirmLeave()) return;
     if (a.pathname === location.pathname && a.hash) {
       document.getElementById(decodeURIComponent(a.hash.slice(1)))?.scrollIntoView({ behavior: 'smooth' });
       return;

@@ -9,6 +9,7 @@ const COLUMNS = [
   ['materials', 'chunk_size', 'ALTER TABLE materials ADD COLUMN chunk_size INTEGER'],
   ['materials', 'tab', "ALTER TABLE materials ADD COLUMN tab TEXT NOT NULL DEFAULT 'materiali'"],
   ['sections', 'body_text', 'ALTER TABLE sections ADD COLUMN body_text TEXT'],
+  ['section_revisions', 'tab', "ALTER TABLE section_revisions ADD COLUMN tab TEXT NOT NULL DEFAULT 'urok'"],
 ];
 
 let ready = false;

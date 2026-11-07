@@ -2,6 +2,7 @@
 import { json, fail, readJson } from './http.js';
 import { currentUser, requireActive, requireStaff } from './auth.js';
 import { listForSection } from './routes-materials.js';
+import { listForSection as quizzesFor } from './routes-quizzes.js';
 
 // Без текста на урока — той може да е голям (снимки), четем го само когато трябва
 const LIST_FIELDS = 'id, slug, parent_id, kind, grade, code, title, summary, goals, sort, updated_at';
@@ -66,11 +67,15 @@ export async function section(env, request, slug) {
     const { results } = await env.DB.prepare(
       `SELECT t.id, t.slug, t.parent_id, t.code, t.title,
               (SELECT COUNT(*) FROM materials m
-                WHERE m.section_id = t.id AND m.status = 'ready' AND (m.audience = 'all' OR ?2)) AS materials
+                WHERE m.section_id = t.id AND m.status = 'ready' AND (m.audience = 'all' OR ?2)) AS materials,
+              (SELECT COUNT(*) FROM quizzes q WHERE q.section_id = t.id AND (q.status = 'published' OR ?2)) AS quizzes,
+              (SELECT 1 FROM lesson_views v WHERE v.user_id = ?3 AND v.section_id = t.id) AS seen,
+              (SELECT MAX(a.score / a.max_score) FROM quiz_attempts a JOIN quizzes q ON q.id = a.quiz_id
+                WHERE q.section_id = t.id AND a.user_id = ?3) AS best
          FROM sections t JOIN sections th ON th.id = t.parent_id
         WHERE th.parent_id = ?1 ORDER BY t.sort`,
     )
-      .bind(s.id, staff)
+      .bind(s.id, staff, me.id)
       .all();
     grand = results;
   }
@@ -99,12 +104,27 @@ export async function section(env, request, slug) {
       ...shape(c),
       topics: grand
         .filter((g) => g.parent_id === c.id)
-        .map((g) => ({ slug: g.slug, code: g.code, title: g.title, materials: g.materials })),
+        .map((g) => ({
+          slug: g.slug, code: g.code, title: g.title, materials: g.materials, quizzes: g.quizzes,
+          ...(staff ? {} : { seen: !!g.seen, best: g.best }),
+        })),
     })),
     materials: s.kind === 'topic' || s.kind === 'page' ? await listForSection(env, me, s.id) : [],
+    texts: s.kind === 'topic' || s.kind === 'page' ? await tabTexts(env, s.id) : {},
+    quizzes: s.kind === 'topic' || s.kind === 'page' ? await quizzesFor(env, me, s.id) : [],
     prev,
     next,
   });
+}
+
+async function tabTexts(env, sectionId) {
+  const { results } = await env.DB.prepare(
+    `SELECT t.tab, t.body, t.updated_at, u.name AS author FROM tab_texts t LEFT JOIN users u ON u.id = t.updated_by
+      WHERE t.section_id = ? AND t.body IS NOT NULL`,
+  )
+    .bind(sectionId)
+    .all();
+  return Object.fromEntries(results.map((r) => [r.tab, { body: r.body, updatedAt: r.updated_at, updatedBy: r.author }]));
 }
 
 export async function links(env, request) {
@@ -115,67 +135,101 @@ export async function links(env, request) {
   return json({ links: results });
 }
 
-// ---------- Текстът на урока ----------
-export async function saveBody(env, request, slug) {
-  const me = requireStaff(await currentUser(env, request));
-  const b = await readJson(request);
-  const s = await env.DB.prepare('SELECT id, kind, body, body_text, updated_by, updated_at FROM sections WHERE slug = ?')
-    .bind(slug)
-    .first();
+// ---------- Текст в табовете ----------
+// Таб „Урок“ пази текста си в sections.body; другите табове — в tab_texts.
+export const TEXT_TABS = ['urok', 'karti', 'zadachi', 'materiali'];
+
+async function loadText(env, sectionId, tab) {
+  if (tab === 'urok') {
+    return env.DB.prepare('SELECT body, body_text, updated_by, updated_at FROM sections WHERE id = ?').bind(sectionId).first();
+  }
+  return (
+    (await env.DB.prepare('SELECT body, body_text, updated_by, updated_at FROM tab_texts WHERE section_id = ? AND tab = ?')
+      .bind(sectionId, tab)
+      .first()) || { body: null, body_text: null, updated_by: null, updated_at: null }
+  );
+}
+
+async function sectionForText(env, slug) {
+  const s = await env.DB.prepare('SELECT id, kind FROM sections WHERE slug = ?').bind(slug).first();
   if (!s || (s.kind !== 'topic' && s.kind !== 'page')) fail(404, 'Няма такъв урок.');
+  return s;
+}
+
+const checkTab = (tab) => {
+  if (!TEXT_TABS.includes(tab)) fail(404, 'Няма такъв таб.');
+  return tab;
+};
+
+export async function saveText(env, request, slug, tab) {
+  const me = requireStaff(await currentUser(env, request));
+  checkTab(tab);
+  const b = await readJson(request);
+  const s = await sectionForText(env, slug);
+  const old = await loadText(env, s.id, tab);
 
   const text = typeof b.text === 'string' ? b.text.trim().slice(0, MAX_TEXT) : '';
   const body = typeof b.body === 'string' && b.body.trim() ? b.body : null;
   if (body && body.length > MAX_BODY) {
-    fail(413, 'Урокът е твърде голям — обикновено заради много или големи снимки. Махни някоя снимка или я качи като отделен файл в таба.');
+    fail(413, 'Текстът е твърде голям — обикновено заради много или големи снимки. Махни някоя снимка или я качи като отделен файл в таба.');
   }
   // Някой друг да не е записал междувременно
-  if (!b.force && (b.baseUpdatedAt || null) !== (s.updated_at || null)) {
-    fail(409, 'Докато пишеше, някой друг е променил урока.');
+  if (!b.force && (b.baseUpdatedAt || null) !== (old.updated_at || null)) {
+    fail(409, 'Докато пишеше, някой друг е променил този текст.');
   }
 
   const stmts = [];
-  if (s.body) {
+  if (old.body) {
     stmts.push(
-      env.DB.prepare('INSERT INTO section_revisions (section_id, body, body_text, updated_by, updated_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(s.id, s.body, s.body_text, s.updated_by, s.updated_at),
+      env.DB.prepare('INSERT INTO section_revisions (section_id, tab, body, body_text, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(s.id, tab, old.body, old.body_text, old.updated_by, old.updated_at),
+    );
+  }
+  if (tab === 'urok') {
+    stmts.push(
+      env.DB.prepare("UPDATE sections SET body = ?, body_text = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(body, body ? text : null, me.id, s.id),
+    );
+  } else {
+    stmts.push(
+      env.DB.prepare(
+        `INSERT INTO tab_texts (section_id, tab, body, body_text, updated_by, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))
+         ON CONFLICT (section_id, tab) DO UPDATE SET body = ?3, body_text = ?4, updated_by = ?5, updated_at = datetime('now')`,
+      ).bind(s.id, tab, body, body ? text : null, me.id),
     );
   }
   stmts.push(
-    env.DB.prepare("UPDATE sections SET body = ?, body_text = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ?")
-      .bind(body, body ? text : null, me.id, s.id),
-  );
-  stmts.push(
     env.DB.prepare(
-      `DELETE FROM section_revisions WHERE section_id = ?1 AND id NOT IN
-         (SELECT id FROM section_revisions WHERE section_id = ?1 ORDER BY id DESC LIMIT ${KEEP_REVISIONS})`,
-    ).bind(s.id),
+      `DELETE FROM section_revisions WHERE section_id = ?1 AND tab = ?2 AND id NOT IN
+         (SELECT id FROM section_revisions WHERE section_id = ?1 AND tab = ?2 ORDER BY id DESC LIMIT ${KEEP_REVISIONS})`,
+    ).bind(s.id, tab),
   );
   await env.DB.batch(stmts);
-  const after = await env.DB.prepare('SELECT updated_at FROM sections WHERE id = ?').bind(s.id).first();
+  const after = await loadText(env, s.id, tab);
   return json({ updatedAt: after.updated_at, updatedBy: me.name });
 }
 
-export async function revisions(env, request, slug) {
+export async function revisions(env, request, slug, tab) {
   requireStaff(await currentUser(env, request));
-  const s = await env.DB.prepare('SELECT id FROM sections WHERE slug = ?').bind(slug).first();
-  if (!s) fail(404, 'Няма такъв урок.');
+  checkTab(tab);
+  const s = await sectionForText(env, slug);
   const { results } = await env.DB.prepare(
     `SELECT r.id, r.updated_at, u.name AS author, substr(r.body_text, 1, 140) AS preview
        FROM section_revisions r LEFT JOIN users u ON u.id = r.updated_by
-      WHERE r.section_id = ? ORDER BY r.id DESC`,
+      WHERE r.section_id = ? AND r.tab = ? ORDER BY r.id DESC`,
   )
-    .bind(s.id)
+    .bind(s.id, tab)
     .all();
   return json({ revisions: results.map((r) => ({ id: r.id, updatedAt: r.updated_at, author: r.author, preview: r.preview })) });
 }
 
-export async function revision(env, request, slug, id) {
+export async function revision(env, request, slug, tab, id) {
   requireStaff(await currentUser(env, request));
+  checkTab(tab);
   const r = await env.DB.prepare(
-    'SELECT r.body FROM section_revisions r JOIN sections s ON s.id = r.section_id WHERE s.slug = ? AND r.id = ?',
+    'SELECT r.body FROM section_revisions r JOIN sections s ON s.id = r.section_id WHERE s.slug = ? AND r.tab = ? AND r.id = ?',
   )
-    .bind(slug, Number(id))
+    .bind(slug, tab, Number(id))
     .first();
   if (!r) fail(404, 'Няма такава версия.');
   return json({ body: r.body });
@@ -188,10 +242,12 @@ export async function search(env, request) {
   if (q.length < 2) return json({ results: [] });
   // SQLite различава главни и малки букви на кирилица, затова филтрираме тук
   const { results: all } = await env.DB.prepare(
-    `SELECT slug, kind, grade, code, title, summary, goals, body_text FROM sections
+    `SELECT slug, kind, grade, code, title, summary, goals, body_text,
+            (SELECT group_concat(body_text, ' ') FROM tab_texts WHERE tab_texts.section_id = sections.id) AS tabs_text
+       FROM sections
       WHERE kind IN ('topic', 'page', 'theme') ORDER BY grade, parent_id, sort`,
   ).all();
-  const hay = (r) => [r.title, r.summary, r.goals, r.body_text].filter(Boolean).join(' ').toLowerCase();
+  const hay = (r) => [r.title, r.summary, r.goals, r.body_text, r.tabs_text].filter(Boolean).join(' ').toLowerCase();
   const results = all
     .filter((r) => hay(r).includes(q))
     .sort((a, b) => Number(!a.title.toLowerCase().includes(q)) - Number(!b.title.toLowerCase().includes(q)))

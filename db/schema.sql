@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS material_chunks (
 CREATE TABLE IF NOT EXISTS section_revisions (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   section_id  INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  tab         TEXT NOT NULL DEFAULT 'urok',
   body        TEXT,
   body_text   TEXT,
   updated_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -105,3 +106,62 @@ CREATE TABLE IF NOT EXISTS section_revisions (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS section_revisions_section ON section_revisions (section_id, id);
+
+-- Текст в табовете „Карти и графики“, „Задачи и тестове“, „Материали“
+-- (текстът на таб „Урок“ е в sections.body)
+CREATE TABLE IF NOT EXISTS tab_texts (
+  section_id  INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  tab         TEXT NOT NULL,
+  body        TEXT,
+  body_text   TEXT,
+  updated_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at  TEXT,
+  PRIMARY KEY (section_id, tab)
+);
+
+-- Тестове. Въпросите са в JSON (виж server/routes-quizzes.js)
+CREATE TABLE IF NOT EXISTS quizzes (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  section_id    INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  tab           TEXT NOT NULL DEFAULT 'zadachi',
+  title         TEXT NOT NULL,
+  intro         TEXT,
+  questions     TEXT NOT NULL,
+  max_attempts  INTEGER,                       -- NULL = без ограничение
+  show_answers  INTEGER NOT NULL DEFAULT 1,    -- показва верните отговори след предаване
+  status        TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+  created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS quizzes_section ON quizzes (section_id, status);
+
+-- Опити на учениците
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  quiz_id      INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  answers      TEXT NOT NULL,                  -- JSON: отговорите
+  results      TEXT NOT NULL,                  -- JSON: точки по въпрос
+  score        REAL NOT NULL,
+  max_score    REAL NOT NULL,
+  pending      INTEGER NOT NULL DEFAULT 0,     -- свободни отговори, които чакат оценка
+  feedback     TEXT,                           -- коментар от учителя
+  reviewed_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at  TEXT,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS quiz_attempts_quiz ON quiz_attempts (quiz_id, user_id);
+CREATE INDEX IF NOT EXISTS quiz_attempts_user ON quiz_attempts (user_id, created_at);
+
+-- Кои уроци е отворил ученикът
+CREATE TABLE IF NOT EXISTS lesson_views (
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  section_id  INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  first_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  last_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  views       INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (user_id, section_id)
+);
+CREATE INDEX IF NOT EXISTS lesson_views_section ON lesson_views (section_id);

@@ -3,7 +3,9 @@ import { api } from './api.js';
 import { state, go, refreshMe, render, APP_NAME } from './app.js';
 import { esc, $, $$, toast, icon, reliefSvg, animateRelief, plural, classLabel } from './ui.js';
 import { materialsPanel, itemHtml, bindFileActions, TAB_NAMES } from './materials.js';
-import { lessonPanel, hasUnsavedLesson } from './lesson.js';
+import { tabPanel, tabCount } from './tabpanel.js';
+import { confirmLeave } from './ui.js';
+import { pct, level } from './quiz.js';
 
 const gradeKey = (s) => (s.grade ? String(s.grade) : 'x');
 const setTitle = (t) => (document.title = t ? `${t} — ${APP_NAME}` : `${APP_NAME} — география за 5.–7. клас`);
@@ -251,6 +253,19 @@ const crumbsHtml = (crumbs, current) => `
     <li aria-current="page">${esc(current)}</li>
   </ol>`;
 
+// Какво пише вдясно на всеки урок в списъка
+function topicState(t) {
+  if (isStaff()) {
+    const parts = [t.quizzes ? plural(t.quizzes, 'тест', 'теста') : '', t.materials ? plural(t.materials, 'материал', 'материала') : ''].filter(Boolean);
+    return `<span class="state ${parts.length ? 'has' : ''}">${parts.join(', ')}</span>`;
+  }
+  const bits = [];
+  if (t.best !== null && t.best !== undefined) bits.push(`<span class="score-pill" data-l="${level(t.best)}">${pct(t.best)}</span>`);
+  else if (t.quizzes) bits.push(`<span class="todo">${t.quizzes === 1 ? 'има тест' : 'има тестове'}</span>`);
+  if (t.seen) bits.push('<span class="seen" title="Отворен">✓</span>');
+  return `<span class="state">${bits.join('')}</span>`;
+}
+
 function gradeView(main, { section: s, children }) {
   const topicCount = children.reduce((n, c) => n + c.topics.length, 0);
   main.innerHTML = `
@@ -278,7 +293,7 @@ function gradeView(main, { section: s, children }) {
                   <li><a href="/s/${esc(t.slug)}">
                     <span class="code">${esc(t.code || '')}</span>
                     <span>${esc(t.title)}</span>
-                    <span class="state ${t.materials ? 'has' : ''}">${t.materials ? plural(t.materials, 'материал', 'материала') : ''}</span>
+                    ${topicState(t)}
                   </a></li>`).join('')}
               </ol>
             </section>`).join('')}
@@ -325,11 +340,20 @@ function areaView(main, { section: s, children }) {
 // Табовете на урока
 const TABS = Object.entries(TAB_NAMES).map(([id, label]) => ({ id, label }));
 
-function topicView(main, { section: s, crumbs, prev, next, materials }) {
-  let mats = materials || [];
-  const count = (id) => mats.filter((m) => (m.tab || 'materiali') === id).length;
-  const tabLabel = (t) => (t.id !== 'urok' && count(t.id) ? `${t.label} (${count(t.id)})` : t.label);
+function topicView(main, { section: s, crumbs, prev, next, materials, quizzes, texts }) {
+  // Общо за всички табове — променя се на място
+  const data = {
+    materials: materials || [],
+    quizzes: quizzes || [],
+    texts: { ...(texts || {}), urok: { body: s.body, updatedAt: s.updatedAt, updatedBy: s.updatedBy } },
+  };
+  const tabLabel = (t) => {
+    const n = tabCount(data, t.id);
+    return t.id !== 'urok' && n ? `${t.label} (${n})` : t.label;
+  };
   const start = TABS.find((t) => '#' + t.id === location.hash) || TABS[0];
+  // Ученикът отвори урока — отбелязваме го за напредъка
+  if (state.user?.role === 'student') api(`/sections/${encodeURIComponent(s.slug)}/view`, { method: 'POST' }).catch(() => {});
 
   main.innerHTML = `
     <div data-c="${gradeKey(s)}">
@@ -362,20 +386,16 @@ function topicView(main, { section: s, crumbs, prev, next, materials }) {
 
   const tabs = $$('[role="tab"]', main);
   const panel = $('#panel', main);
-  const onMaterialsChange = (list) => {
-    mats = list;
-    tabs.forEach((b) => (b.textContent = tabLabel(TABS.find((t) => t.id === b.dataset.tab))));
-  };
+  const updateLabels = () => tabs.forEach((b) => (b.textContent = tabLabel(TABS.find((t) => t.id === b.dataset.tab))));
   const show = (tab) => {
     panel.setAttribute('aria-labelledby', 'tab-' + tab.id);
     // нов контейнер всеки път, за да не се трупат слушатели
     panel.innerHTML = '<div></div>';
-    if (tab.id === 'urok') lessonPanel(panel.firstChild, { section: s, materials: mats, onMaterialsChange });
-    else materialsPanel(panel.firstChild, { slug: s.slug, tab: tab.id, all: mats, onChange: onMaterialsChange });
+    tabPanel(panel.firstChild, { section: s, tab: tab.id, data, onChange: updateLabels });
   };
   const select = (btn) => {
     if (btn.getAttribute('aria-selected') === 'true') return;
-    if (hasUnsavedLesson() && !window.confirm('Имаш незапазени промени в урока. Да ги изоставя ли?')) return;
+    if (!confirmLeave()) return;
     tabs.forEach((b) => {
       b.setAttribute('aria-selected', b === btn);
       b.tabIndex = b === btn ? 0 : -1;
