@@ -2,7 +2,8 @@
 import { api } from './api.js';
 import { state, go, refreshMe, render, APP_NAME } from './app.js';
 import { esc, $, $$, toast, icon, reliefSvg, animateRelief, plural, classLabel } from './ui.js';
-import { materialsPanel, itemHtml, bindFileActions } from './materials.js';
+import { materialsPanel, itemHtml, bindFileActions, TAB_NAMES } from './materials.js';
+import { lessonPanel, hasUnsavedLesson } from './lesson.js';
 
 const gradeKey = (s) => (s.grade ? String(s.grade) : 'x');
 const setTitle = (t) => (document.title = t ? `${t} — ${APP_NAME}` : `${APP_NAME} — география за 5.–7. клас`);
@@ -217,7 +218,7 @@ export function home() {
           <aside class="panel">
             <h2>Полезни връзки</h2>
             <ul class="linklist">
-              ${links.slice(0, 6).map((l) => `<li><a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title)}<small>${esc(l.description || '')}</small></a></li>`).join('')}
+              ${links.slice(0, 6).map((l) => `<li><a href="${esc(l.url)}" rel="noopener">${esc(l.title)}<small>${esc(l.description || '')}</small></a></li>`).join('')}
             </ul>
             <p style="margin-top:.9rem"><a href="/vrazki">Всички връзки</a></p>
           </aside>
@@ -321,32 +322,13 @@ function areaView(main, { section: s, children }) {
     ${footer()}`;
 }
 
-// Табовете на урока. Съдържанието им идва в следващите версии.
-const TABS = [
-  { id: 'urok', label: 'Урок', icon: 'book',
-    staff: 'Тук ще пишеш самия урок — текст, снимки, видео. Редакторът идва със следващата версия.',
-    student: 'Учителят още не е добавил урока.' },
-  { id: 'karti', label: 'Карти и графики', icon: 'map',
-    staff: 'Тук ще стоят интерактивни карти, слепи карти, инфографики и диаграми към урока.',
-    student: 'Към този урок още няма карти и графики.' },
-  { id: 'zadachi', label: 'Задачи и тестове', icon: 'check',
-    staff: 'Тук ще създаваш тестове, задачи за упражнение и домашни с автоматична проверка.',
-    student: 'Към този урок още няма задачи.' },
-  { id: 'materiali', label: 'Материали', icon: 'folder',
-    staff: 'Тук ще качваш файлове — презентации, работни листове, PDF-и.',
-    student: 'Към този урок още няма качени материали.' },
-];
+// Табовете на урока
+const TABS = Object.entries(TAB_NAMES).map(([id, label]) => ({ id, label }));
 
 function topicView(main, { section: s, crumbs, prev, next, materials }) {
-  const staff = isStaff();
   let mats = materials || [];
-  const tabLabel = (t) => (t.id === 'materiali' && mats.length ? `${t.label} (${mats.length})` : t.label);
-  const bodyHtml = (tab) => {
-    if (tab.id === 'urok' && s.body) {
-      return `<div class="prose">${s.body.split(/\n{2,}/).map((p) => `<p>${esc(p)}</p>`).join('')}</div>`;
-    }
-    return `<div class="empty">${icon[tab.icon]}<strong>${esc(tab.label)}</strong><span>${esc(staff ? tab.staff : tab.student)}</span></div>`;
-  };
+  const count = (id) => mats.filter((m) => (m.tab || 'materiali') === id).length;
+  const tabLabel = (t) => (t.id !== 'urok' && count(t.id) ? `${t.label} (${count(t.id)})` : t.label);
   const start = TABS.find((t) => '#' + t.id === location.hash) || TABS[0];
 
   main.innerHTML = `
@@ -362,7 +344,7 @@ function topicView(main, { section: s, crumbs, prev, next, materials }) {
         </div>
       </div></header>
       <div class="wrap topic-body">
-        <div>
+        <div class="topic-main">
           <div id="panel" role="tabpanel" aria-labelledby="tab-${start.id}"></div>
           <nav class="pager" aria-label="Съседни уроци">
             ${prev ? `<a href="/s/${esc(prev.slug)}"><small>Предишен</small>${esc((prev.code ? prev.code + ' ' : '') + prev.title)}</a>` : ''}
@@ -380,22 +362,20 @@ function topicView(main, { section: s, crumbs, prev, next, materials }) {
 
   const tabs = $$('[role="tab"]', main);
   const panel = $('#panel', main);
+  const onMaterialsChange = (list) => {
+    mats = list;
+    tabs.forEach((b) => (b.textContent = tabLabel(TABS.find((t) => t.id === b.dataset.tab))));
+  };
   const show = (tab) => {
     panel.setAttribute('aria-labelledby', 'tab-' + tab.id);
-    if (tab.id === 'materiali') {
-      // нов контейнер всеки път, за да не се трупат слушатели
-      panel.innerHTML = '<div></div>';
-      materialsPanel(panel.firstChild, {
-        slug: s.slug,
-        materials: mats,
-        onChange: (list) => {
-          mats = list;
-          $('#tab-materiali', main).textContent = tabLabel(tab);
-        },
-      });
-    } else panel.innerHTML = bodyHtml(tab);
+    // нов контейнер всеки път, за да не се трупат слушатели
+    panel.innerHTML = '<div></div>';
+    if (tab.id === 'urok') lessonPanel(panel.firstChild, { section: s, materials: mats, onMaterialsChange });
+    else materialsPanel(panel.firstChild, { slug: s.slug, tab: tab.id, all: mats, onChange: onMaterialsChange });
   };
   const select = (btn) => {
+    if (btn.getAttribute('aria-selected') === 'true') return;
+    if (hasUnsavedLesson() && !window.confirm('Имаш незапазени промени в урока. Да ги изоставя ли?')) return;
     tabs.forEach((b) => {
       b.setAttribute('aria-selected', b === btn);
       b.tabIndex = b === btn ? 0 : -1;
@@ -428,12 +408,12 @@ export function links() {
     main.innerHTML = `
       <div class="wrap">
         <header class="page-head"><h1>Полезни връзки</h1>
-          <p>Сайтове с карти, данни и материали по география. Отварят се в нов прозорец.</p></header>
+          <p>Сайтове с карти, данни и материали по география.</p></header>
         <div class="links-grid">
           ${Object.entries(groups).map(([cat, items]) => `
             <section><h2>${esc(cat)}</h2>
               <div class="link-cards">
-                ${items.map((l) => `<a class="link-card" href="${esc(l.url)}" target="_blank" rel="noopener">
+                ${items.map((l) => `<a class="link-card" href="${esc(l.url)}" rel="noopener">
                   <strong>${esc(l.title)}</strong><span class="host">${esc(host(l.url))}</span><p>${esc(l.description || '')}</p></a>`).join('')}
               </div></section>`).join('')}
         </div>

@@ -3,6 +3,8 @@ import { api } from './api.js';
 import { esc, $, icon, initials, roleName, classLabel } from './ui.js';
 import * as views from './views.js';
 import { usersView } from './users.js';
+import { handleViewerPop } from './viewer.js';
+import { hasUnsavedLesson } from './lesson.js';
 
 export const APP_NAME = 'ГеоКомпас';
 
@@ -119,6 +121,7 @@ document.addEventListener('click', async (e) => {
   if (a && a.origin === location.origin && !a.target && !a.hasAttribute('download') && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
     if (a.pathname.startsWith('/api/')) return;
     e.preventDefault();
+    if (hasUnsavedLesson() && !window.confirm('Имаш незапазени промени в урока. Да ги изоставя ли?')) return;
     if (a.pathname === location.pathname && a.hash) {
       document.getElementById(decodeURIComponent(a.hash.slice(1)))?.scrollIntoView({ behavior: 'smooth' });
       return;
@@ -161,7 +164,10 @@ document.addEventListener('submit', (e) => {
   }
 });
 
-window.addEventListener('popstate', render);
+window.addEventListener('popstate', () => {
+  if (handleViewerPop()) return;
+  render();
+});
 
 (async function start() {
   try {

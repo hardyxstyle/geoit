@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS sections (
   title       TEXT NOT NULL,
   summary     TEXT,                        -- едно-две изречения за темата
   goals       TEXT,                        -- JSON масив: „Какво ще научиш“
-  body        TEXT,                        -- съдържание на урока (стъпка 2: редактор)
+  body        TEXT,                        -- текстът на урока (HTML от редактора)
+  body_text   TEXT,                        -- същият текст без форматиране — за търсенето
   sort        INTEGER NOT NULL DEFAULT 0,
   updated_at  TEXT,
   updated_by  INTEGER REFERENCES users(id) ON DELETE SET NULL
@@ -76,6 +77,7 @@ CREATE TABLE IF NOT EXISTS materials (
   chunks       INTEGER,                    -- на колко части е разделен файлът
   chunk_size   INTEGER,                    -- байта в една част
   audience     TEXT NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'teachers')),
+  tab          TEXT NOT NULL DEFAULT 'materiali',  -- urok, karti, zadachi, materiali
   status       TEXT NOT NULL DEFAULT 'ready' CHECK (status IN ('uploading', 'ready')),
   created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
@@ -91,3 +93,15 @@ CREATE TABLE IF NOT EXISTS material_chunks (
   data         TEXT NOT NULL,
   PRIMARY KEY (material_id, idx)
 );
+
+-- Предишни версии на текста на урока (пазим последните 5)
+CREATE TABLE IF NOT EXISTS section_revisions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  section_id  INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+  body        TEXT,
+  body_text   TEXT,
+  updated_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_at  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS section_revisions_section ON section_revisions (section_id, id);

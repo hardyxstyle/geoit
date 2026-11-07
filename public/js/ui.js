@@ -106,3 +106,105 @@ export function reliefSvg() {
 export function animateRelief(root) {
   $$('.relief .ring', root).forEach((p) => p.style.setProperty('--len', Math.ceil(p.getTotalLength())));
 }
+
+// ---------- Зареждане на библиотеки при нужда ----------
+const loaded = new Map();
+export function loadScript(src) {
+  if (!loaded.has(src)) {
+    loaded.set(
+      src,
+      new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => {
+          loaded.delete(src);
+          reject(new Error('Не успях да заредя нужната част от сайта. Провери интернета и опитай пак.'));
+        };
+        document.head.append(s);
+      }),
+    );
+  }
+  return loaded.get(src);
+}
+
+export function loadCss(href) {
+  if (!document.querySelector(`link[href="${href}"]`)) {
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = href;
+    document.head.append(l);
+  }
+}
+
+// ---------- Безопасен HTML (текстът на урока, внесени Word файлове) ----------
+// Вградени видеа и карти — само от тези сайтове
+const IFRAME_HOSTS = /^(www\.)?(youtube(-nocookie)?\.com|player\.vimeo\.com|drive\.google\.com|docs\.google\.com|([a-z0-9-]+\.)*arcgis\.com|www\.google\.com)$/;
+
+export async function sanitizeHtml(html) {
+  await loadScript('/vendor/purify-3.2.6.min.js');
+  const P = window.DOMPurify;
+  if (!P.__gk) {
+    P.addHook('uponSanitizeElement', (node, data) => {
+      if (data.tagName === 'iframe') {
+        let ok = false;
+        try {
+          const u = new URL(node.getAttribute('src') || '', location.href);
+          ok = u.protocol === 'https:' && IFRAME_HOSTS.test(u.hostname);
+        } catch {
+          ok = false;
+        }
+        if (!ok) node.parentNode?.removeChild(node);
+      }
+    });
+    // Връзките се отварят в същия прозорец
+    P.addHook('afterSanitizeAttributes', (node) => {
+      if (node.tagName === 'A') {
+        node.removeAttribute('target');
+        node.setAttribute('rel', 'noopener');
+      }
+      if (node.tagName === 'IFRAME') {
+        node.setAttribute('allowfullscreen', '');
+        node.setAttribute('loading', 'lazy');
+      }
+    });
+    P.__gk = true;
+  }
+  return P.sanitize(html, {
+    ADD_TAGS: ['iframe'],
+    ADD_ATTR: ['allowfullscreen', 'frameborder', 'allow'],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|jpe?g|gif|webp);base64,|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+  });
+}
+
+// ---------- Снимки: смаляване преди запис ----------
+export async function shrinkImage(blob, max = 1280, quality = 0.82) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('Снимката не може да се отвори.'));
+      i.src = url;
+    });
+    const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const small = blob.size < 180 * 1024 && scale === 1 && /^image\/(png|jpe?g|gif|webp)$/.test(blob.type);
+    if (small) {
+      return await new Promise((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.readAsDataURL(blob);
+      });
+    }
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * scale);
+    c.height = Math.round(img.naturalHeight * scale);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', quality);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

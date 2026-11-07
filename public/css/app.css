@@ -540,3 +540,108 @@ textarea.input { resize: vertical; min-height: 3.2rem; line-height: 1.45; }
 .progress .ptext { position: relative; display: grid; place-items: center; height: 100%; font-size: .9rem; font-weight: 600; }
 .progress[hidden] { display: none; }
 input[type="file"].input { padding: .55rem; }
+
+/* ---------- Текстът на урока ---------- */
+.topic-main { min-width: 0; }
+.lesson { display: grid; gap: 1.4rem; }
+.lesson-tools { display: flex; gap: .6rem; flex-wrap: wrap; }
+.lesson-files .mats-actions { margin-bottom: .8rem; }
+.edited { color: var(--ink-faint); font-size: .85rem; margin-top: -.6rem; }
+.lesson-body, .preview-doc { max-width: 72ch; font-size: 1.06rem; line-height: 1.7; overflow-wrap: anywhere; }
+.lesson-body > * + *, .preview-doc > * + * { margin-top: .9em; }
+.lesson-body h2, .preview-doc h1, .preview-doc h2 { font-family: var(--font-body); font-weight: 700; font-size: 1.35rem; margin-top: 1.6em; letter-spacing: 0; }
+.lesson-body h3, .preview-doc h3 { font-family: var(--font-body); font-weight: 700; font-size: 1.12rem; margin-top: 1.3em; color: var(--c, var(--ink)); }
+.lesson-body ul, .lesson-body ol, .preview-doc ul, .preview-doc ol { padding-left: 1.4em; }
+.lesson-body li + li, .preview-doc li + li { margin-top: .3em; }
+.lesson-body blockquote, .preview-doc blockquote {
+  margin: 1.2em 0; padding: .9rem 1.1rem; border-left: 5px solid var(--c, var(--focus)); background: var(--tint, var(--sunken));
+  border-radius: 0 var(--radius) var(--radius) 0; font-weight: 500;
+}
+.lesson-body img, .preview-doc img { max-width: 100%; height: auto; border-radius: 8px; margin: .4em 0; }
+.lesson-body iframe { width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; border-radius: 10px; background: var(--sunken); }
+.lesson-body a, .preview-doc a { color: var(--focus); }
+.preview-doc table { border-collapse: collapse; width: 100%; }
+.preview-doc td, .preview-doc th { border: 1px solid var(--line); padding: .35rem .5rem; vertical-align: top; }
+
+/* Редакторът */
+.lesson-edit { display: grid; gap: .8rem; }
+.editor-bar { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; position: sticky; top: 61px; z-index: 5; background: var(--paper); padding: .5rem 0; }
+.editor-bar .spacer { flex: 1; }
+.edit-note { margin: 0; }
+.editor-host .ql-toolbar.ql-snow { border: 1px solid var(--line-strong); border-radius: var(--radius) var(--radius) 0 0; background: var(--surface); font-family: var(--font-body); }
+.editor-host .ql-container.ql-snow { border: 1px solid var(--line-strong); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); background: var(--surface); font-family: var(--font-body); font-size: 1.05rem; }
+.editor-host .ql-editor { min-height: 50vh; line-height: 1.7; color: var(--ink); }
+.editor-host .ql-editor h2 { font-size: 1.35rem; } .editor-host .ql-editor h3 { font-size: 1.12rem; }
+.editor-host .ql-editor blockquote { border-left: 5px solid var(--c, var(--focus)); background: var(--tint, var(--sunken)); padding: .6rem 1rem; }
+.editor-host .ql-editor img { max-width: 100%; }
+.editor-host .ql-editor.ql-blank::before { color: var(--ink-faint); font-style: normal; }
+.editor-host .ql-snow .ql-tooltip { z-index: 10; border-radius: 8px; }
+@media (prefers-color-scheme: dark) {
+  .editor-host .ql-snow .ql-stroke { stroke: var(--ink-soft); }
+  .editor-host .ql-snow .ql-fill { fill: var(--ink-soft); }
+  .editor-host .ql-snow .ql-picker { color: var(--ink-soft); }
+  .editor-host .ql-snow .ql-picker-options, .editor-host .ql-snow .ql-tooltip { background: var(--surface); color: var(--ink); border-color: var(--line); }
+}
+
+.rev-list { list-style: none; padding: 0; margin: .8rem 0 0; display: grid; gap: .5rem; max-height: 50vh; overflow: auto; }
+.rev-list li { display: flex; gap: .8rem; justify-content: space-between; align-items: center; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 8px; }
+.rev-list li div { display: grid; gap: .1rem; min-width: 0; }
+.rev-list .muted { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Преглед на файлове ---------- */
+.mat.with-inline { grid-template-columns: 3.4rem 1fr auto; }
+.inline-preview { grid-column: 1 / -1; margin-top: .4rem; min-height: 6rem; }
+.loading-file { padding: 1rem 0; }
+.pdf-pages { display: grid; gap: .8rem; }
+.pdf-page { position: relative; width: 100%; background: #fff; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.pdf-page canvas { display: block; width: 100%; height: auto; }
+.pdf-num { position: absolute; right: .5rem; bottom: .4rem; font-size: .75rem; color: #4B5E6E; background: rgba(255,255,255,.85); padding: 0 .4rem; border-radius: 4px; }
+.preview-img { max-width: 100%; height: auto; margin: 0 auto; border-radius: 8px; }
+.preview-media { width: 100%; max-height: 80vh; border-radius: 8px; background: #000; }
+.preview-audio { width: 100%; }
+.preview-text { white-space: pre-wrap; font-size: .95rem; background: var(--surface); padding: 1rem; border-radius: 8px; border: 1px solid var(--line); }
+.embed { position: relative; width: 100%; aspect-ratio: 16 / 9; }
+.embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 10px; background: var(--sunken); }
+
+dialog.viewer {
+  width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0;
+  background: var(--paper); display: none; flex-direction: column;
+}
+dialog.viewer[open] { display: flex; }
+dialog.viewer::backdrop { background: rgba(14, 26, 34, .6); }
+html.viewer-open { overflow: hidden; }
+.viewer-head {
+  display: flex; align-items: center; gap: 1rem; padding: .7rem max(1rem, env(safe-area-inset-left)); border-bottom: 1px solid var(--line);
+  background: var(--surface); flex-wrap: wrap;
+}
+.viewer-title { flex: 1; min-width: 12rem; display: grid; }
+.viewer-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-title span { color: var(--ink-faint); font-size: .85rem; }
+.viewer-actions { display: flex; gap: .5rem; }
+.viewer-body { flex: 1; overflow: auto; padding: 1rem; -webkit-overflow-scrolling: touch; }
+.viewer-body > * { max-width: 1000px; margin-inline: auto; }
+.viewer-body .embed { max-width: 1200px; }
+.viewer-body[data-type="embed"], .viewer-body:has(.embed) { display: grid; place-items: center; }
+.viewer-body:has(.embed) .embed { width: min(100%, calc((100vh - 8rem) * 16 / 9)); }
+.lesson-body h1 { font-family: var(--font-body); font-weight: 700; font-size: 1.5rem; letter-spacing: 0; }
+.editor-host .ql-editor h1, .editor-host .ql-editor h2, .editor-host .ql-editor h3 { font-family: var(--font-body); font-weight: 700; letter-spacing: 0; }
+.editor-host .ql-editor h1 { font-size: 1.5rem; }
+.lesson-body table, .editor-host .ql-editor table { border-collapse: collapse; width: 100%; max-width: 100%; display: block; overflow-x: auto; }
+.lesson-body td, .lesson-body th, .editor-host .ql-editor td { border: 1px solid var(--line-strong); padding: .4rem .6rem; vertical-align: top; min-width: 4rem; }
+.lesson-body tr:first-child td { background: var(--tint, var(--sunken)); font-weight: 600; }
+.lesson-body table, .editor-host .ql-editor table { width: auto; border: 0 !important; }
+
+/* Редакторът на български */
+.editor-host .ql-snow .ql-picker.ql-header { width: 8.5rem; }
+.editor-host .ql-snow .ql-picker.ql-header .ql-picker-label::before,
+.editor-host .ql-snow .ql-picker.ql-header .ql-picker-item::before { content: 'Обикновен текст'; }
+.editor-host .ql-snow .ql-picker.ql-header .ql-picker-label[data-value="2"]::before,
+.editor-host .ql-snow .ql-picker.ql-header .ql-picker-item[data-value="2"]::before { content: 'Заглавие'; }
+.editor-host .ql-snow .ql-picker.ql-header .ql-picker-label[data-value="3"]::before,
+.editor-host .ql-snow .ql-picker.ql-header .ql-picker-item[data-value="3"]::before { content: 'Подзаглавие'; }
+.editor-host .ql-snow .ql-tooltip::before { content: 'Отваря:'; }
+.editor-host .ql-snow .ql-tooltip[data-mode="link"]::before { content: 'Връзка:'; }
+.editor-host .ql-snow .ql-tooltip[data-mode="video"]::before { content: 'Видео:'; }
+.editor-host .ql-snow .ql-tooltip a.ql-action::after { content: 'Промени'; }
+.editor-host .ql-snow .ql-tooltip.ql-editing a.ql-action::after { content: 'Запази'; }
+.editor-host .ql-snow .ql-tooltip a.ql-remove::before { content: 'Махни'; }

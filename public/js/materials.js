@@ -1,99 +1,34 @@
-// Материали: списък, качване, линкове, отваряне и изтегляне
+// Материали към всеки таб на урока: списък, качване, линкове, промяна
 import { api, ApiError, errorText } from './api.js';
 import { state } from './app.js';
 import { esc, $, toast, formatDate } from './ui.js';
+import { fmtSize, kindOf, tagText, host, previewType, pool } from './files.js';
+import { openMaterial, inlinePreview } from './viewer.js';
 
 const isStaff = () => state.user && (state.user.role === 'teacher' || state.user.role === 'admin');
 
-export const fmtSize = (b) =>
-  b < 1048576 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1048576).toFixed(1).replace('.', ',')} MB`;
+export const TAB_NAMES = { urok: 'Урок', karti: 'Карти и графики', zadachi: 'Задачи и тестове', materiali: 'Материали' };
 
-const ext = (name) => ((name || '').match(/\.([a-z0-9]{1,5})$/i)?.[1] || '').toLowerCase();
-
-// Вид на файла → етикет и цвят (вместо иконки)
-const KINDS = [
-  ['pdf', /^pdf$/],
-  ['pres', /^(pptx?|odp|key|pps|ppsx)$/],
-  ['doc', /^(docx?|odt|rtf|txt|pages)$/],
-  ['sheet', /^(xlsx?|ods|csv|numbers)$/],
-  ['img', /^(png|jpe?g|gif|webp|svg|heic|bmp|tiff?)$/],
-  ['media', /^(mp4|webm|mov|mp3|wav|m4a|ogg)$/],
-  ['map', /^(kmz|kml|geojson|gpx|shp|zip)$/],
-];
-const kindOf = (m) => (m.kind === 'link' ? 'link' : KINDS.find(([, re]) => re.test(ext(m.fileName)))?.[0] || 'other');
-const tagText = (m) => (m.kind === 'link' ? 'Линк' : ext(m.fileName).toUpperCase().slice(0, 4) || 'Файл');
-
-// Само тези типове се отварят в нов раздел; всичко останало се изтегля (по-безопасно)
-const OPENABLE = /^(application\/pdf|image\/(png|jpe?g|gif|webp)|video\/(mp4|webm)|audio\/(mpeg|mp4|ogg|wav))$/;
-const host = (u) => {
-  try {
-    return new URL(u).hostname.replace(/^www\./, '');
-  } catch {
-    return u;
-  }
+const EMPTY = {
+  urok: {
+    staff: 'Качи готов урок като PDF, Word или презентация, или добави линк.',
+    student: '',
+  },
+  karti: {
+    staff: 'Качи карта, инфографика или диаграма (снимка или PDF), или добави линк към ArcGIS, Google Earth и т.н.',
+    student: 'Към този урок още няма карти и графики.',
+  },
+  zadachi: {
+    staff: 'Качи тест, работен лист или домашно. По-нататък тук ще може да се правят и тестове с автоматична проверка.',
+    student: 'Към този урок още няма задачи.',
+  },
+  materiali: {
+    staff: 'Качи презентация, работен лист или PDF, или добави линк към видео или карта.',
+    student: 'Учителят още не е добавил материали към този урок.',
+  },
 };
 
 export const typeTag = (m) => `<span class="ftag" data-t="${kindOf(m)}">${esc(tagText(m))}</span>`;
-
-// ---------- Изтегляне ----------
-const cache = new Map(); // id → Blob, за да не тегли втори път
-
-async function pool(n, limit, job) {
-  let next = 0;
-  const run = async () => {
-    while (next < n) await job(next++);
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, n) }, run));
-}
-
-async function fetchFile(m, onProgress) {
-  if (cache.has(m.id)) return cache.get(m.id);
-  const parts = new Array(m.chunks);
-  let done = 0;
-  await pool(m.chunks, 4, async (i) => {
-    const res = await fetch(`/api/materials/${m.id}/chunks/${i}`, { credentials: 'same-origin' });
-    if (!res.ok) throw new Error(`Файлът не можа да се изтегли (грешка ${res.status}). Опитай пак.`);
-    const b64 = await res.text();
-    parts[i] = await (await fetch('data:application/octet-stream;base64,' + b64)).arrayBuffer();
-    onProgress(++done / m.chunks);
-  });
-  const blob = new Blob(parts, { type: OPENABLE.test(m.mime) ? m.mime : 'application/octet-stream' });
-  cache.set(m.id, blob);
-  return blob;
-}
-
-function saveBlob(blob, name) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
-async function getFile(m, btn, open) {
-  // Прозорецът се отваря веднага при клика, иначе браузърът го блокира
-  const win = open ? window.open('', '_blank') : null;
-  if (win) win.document.title = 'Зареждане…';
-  const label = btn.textContent;
-  btn.disabled = true;
-  try {
-    const blob = await fetchFile(m, (p) => (btn.textContent = `${Math.round(p * 100)}%`));
-    if (win) {
-      const url = URL.createObjectURL(blob);
-      win.location.href = url;
-      setTimeout(() => URL.revokeObjectURL(url), 300_000);
-    } else saveBlob(blob, m.fileName);
-  } catch (err) {
-    win?.close();
-    toast(err.message);
-  } finally {
-    btn.textContent = label;
-    btn.disabled = false;
-  }
-}
 
 // ---------- Качване ----------
 const toBase64 = (blob) =>
@@ -133,7 +68,7 @@ async function sendChunk(id, index, data) {
   }
 }
 
-async function uploadFile(section, file, meta, onProgress) {
+export async function uploadFile(section, file, meta, onProgress = () => {}) {
   const { id, chunkSize, chunks } = await api('/materials', {
     method: 'POST',
     body: { ...meta, section, kind: 'file', fileName: file.name, mime: file.type, size: file.size },
@@ -153,22 +88,24 @@ async function uploadFile(section, file, meta, onProgress) {
 }
 
 // ---------- Един ред от списъка ----------
-export function itemHtml(m, { showSection = false } = {}) {
-  const meta = [
-    m.author,
-    m.kind === 'link' ? host(m.url) : fmtSize(m.size),
-    formatDate(m.createdAt),
-  ].filter(Boolean);
-  const where = showSection && m.section
-    ? `<a class="mat-where" href="/s/${esc(m.section.slug)}#materiali" data-c="${m.section.grade || 'x'}">${m.section.grade ? m.section.grade + ' кл., ' : ''}${esc((m.section.code ? m.section.code + ' ' : '') + m.section.title)}</a>`
-    : '';
-  const actions =
-    m.kind === 'link'
-      ? `<a class="btn ghost small" href="${esc(m.url)}" target="_blank" rel="noopener">Отвори</a>`
-      : `${OPENABLE.test(m.mime) ? `<button class="btn ghost small" type="button" data-m="open" data-id="${m.id}">Отвори</button>` : ''}
-         <button class="btn ghost small" type="button" data-m="download" data-id="${m.id}">Изтегли</button>`;
+export function itemHtml(m, { showSection = false, inline = false } = {}) {
+  const meta = [m.author, m.kind === 'link' ? host(m.url) : fmtSize(m.size), formatDate(m.createdAt)].filter(Boolean);
+  const where =
+    showSection && m.section
+      ? `<a class="mat-where" href="/s/${esc(m.section.slug)}#${esc(m.tab || 'materiali')}" data-c="${m.section.grade || 'x'}">${m.section.grade ? m.section.grade + ' кл., ' : ''}${esc((m.section.code ? m.section.code + ' ' : '') + m.section.title)}</a>`
+      : '';
+  const canPreview = !!previewType(m);
+  const showInline = inline && canPreview && m.kind === 'file' && /^(pdf|image|docx)$/.test(previewType(m));
+  const actions = [
+    showInline ? '' : `<button class="btn ghost small" type="button" data-m="open" data-id="${m.id}">${canPreview || m.kind === 'link' ? 'Отвори' : 'Изтегли'}</button>`,
+    m.kind === 'file' && (canPreview || showInline) ? `<button class="btn ghost small" type="button" data-m="download" data-id="${m.id}">Изтегли</button>` : '',
+    m.canEdit && !showSection
+      ? `<button class="btn ghost small" type="button" data-m="edit" data-id="${m.id}">Промени</button>
+         <button class="btn danger small" type="button" data-m="delete" data-id="${m.id}">Изтрий</button>`
+      : '',
+  ].join('');
   return `
-    <li class="mat">
+    <li class="mat ${showInline ? 'with-inline' : ''}">
       ${typeTag(m)}
       <div class="mat-body">
         <strong class="mat-title">${esc(m.title)}</strong>
@@ -176,58 +113,80 @@ export function itemHtml(m, { showSection = false } = {}) {
         ${where}
         <span class="mat-meta">${meta.map(esc).join(', ')}${m.audience === 'teachers' ? '<span class="only-staff">Само за учители</span>' : ''}</span>
       </div>
-      <div class="mat-actions">
-        ${actions}
-        ${m.canEdit && !showSection ? `<button class="btn ghost small" type="button" data-m="edit" data-id="${m.id}">Промени</button>
-          <button class="btn danger small" type="button" data-m="delete" data-id="${m.id}">Изтрий</button>` : ''}
-      </div>
+      <div class="mat-actions">${actions}</div>
+      ${showInline ? `<div class="inline-preview" data-preview="${m.id}"></div>` : ''}
     </li>`;
 }
 
-// Действията „Отвори“ и „Изтегли“ работят навсякъде, където има списък
+// „Отвори“ и „Изтегли“ работят навсякъде, където има списък
 export function bindFileActions(root, getList) {
-  root.addEventListener('click', (e) => {
+  root.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-m="open"], [data-m="download"]');
     if (!btn) return;
     const m = getList().find((x) => x.id === Number(btn.dataset.id));
-    if (m) getFile(m, btn, btn.dataset.m === 'open');
+    if (!m) return;
+    if (btn.dataset.m === 'open' && (m.kind === 'link' || previewType(m))) return openMaterial(m);
+    // изтегляне
+    const label = btn.textContent;
+    btn.disabled = true;
+    try {
+      const { fetchFile, saveBlob } = await import('./files.js');
+      saveBlob(await fetchFile(m, (p) => (btn.textContent = `${Math.round(p * 100)}%`)), m.fileName);
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      btn.textContent = label;
+      btn.disabled = false;
+    }
   });
 }
 
-// ---------- Панелът към урока ----------
-export function materialsPanel(panel, { slug, materials, onChange }) {
-  let list = materials;
+// ---------- Панел с материали за един таб ----------
+// all — всички материали на урока; панелът показва само тези от своя таб
+export function materialsPanel(root, { slug, tab, all, onChange, inline = false, compactEmpty = false }) {
+  let everything = all;
   const staff = isStaff();
+  const mine = () => everything.filter((m) => (m.tab || 'materiali') === tab);
 
   function draw() {
-    panel.innerHTML = `
-      <div class="mats ${staff ? 'droppable' : ''}">
+    const list = mine();
+    const empty = staff ? EMPTY[tab].staff : EMPTY[tab].student;
+    root.innerHTML = `
+      <div class="mats">
         ${staff ? `
           <div class="mats-actions">
-            <button class="btn" type="button" data-m="upload">Качи файл</button>
+            <button class="btn ${tab === 'urok' ? 'ghost' : ''}" type="button" data-m="upload">${tab === 'urok' ? 'Качи готов урок (файл)' : 'Качи файл'}</button>
             <button class="btn ghost" type="button" data-m="link">Добави линк</button>
             <span class="drop-hint">или пусни файл тук</span>
           </div>` : ''}
         ${list.length
-          ? `<ul class="mat-list">${list.map((m) => itemHtml(m)).join('')}</ul>`
-          : `<div class="empty"><strong>Още няма материали</strong>
-              <span>${staff ? 'Качи презентация, работен лист или PDF, или добави линк към видео или карта.' : 'Учителят още не е добавил материали към този урок.'}</span></div>`}
+          ? `<ul class="mat-list">${list.map((m) => itemHtml(m, { inline })).join('')}</ul>`
+          : compactEmpty
+            ? (staff ? `<p class="muted">${esc(empty)}</p>` : '')
+            : `<div class="empty"><strong>Още няма нищо тук</strong><span>${esc(empty)}</span></div>`}
       </div>
       <dialog class="mdlg"></dialog>`;
+    if (inline) {
+      root.querySelectorAll('[data-preview]').forEach((box) => {
+        const m = list.find((x) => x.id === Number(box.dataset.preview));
+        if (m) inlinePreview(box, m);
+      });
+    }
   }
 
   async function reload() {
     const data = await api('/materials?section=' + encodeURIComponent(slug));
-    list = data.materials;
+    everything = data.materials;
     draw();
-    onChange?.(list);
+    onChange?.(everything);
   }
 
   // ---- Диалог за качване / линк / промяна ----
-  async function openForm(mode, m = null, file = null) {
-    const dlg = $('.mdlg', panel);
+  function openForm(mode, m = null, file = null) {
+    const dlg = $('.mdlg', root);
     const isLink = mode === 'link' || m?.kind === 'link';
     const title = mode === 'edit' ? 'Промени материала' : isLink ? 'Добави линк' : 'Качи файл';
+    const curTab = m?.tab || tab;
     dlg.innerHTML = `
       <h2>${title}</h2>
       <form class="form" novalidate>
@@ -240,18 +199,22 @@ export function materialsPanel(panel, { slug, materials, onChange }) {
         ${isLink ? `
           <div class="field"><label for="mf-url">Адрес</label>
             <input class="input" id="mf-url" name="url" type="url" inputmode="url" placeholder="https://" value="${esc(m?.url || '')}" required>
-            <span class="hint">Видео в YouTube, папка в Google Drive, карта в ArcGIS и т.н.</span></div>` : ''}
+            <span class="hint">YouTube и Google Drive/Документи/Презентации се показват направо в сайта.</span></div>` : ''}
         <div class="field"><label for="mf-title">Заглавие</label>
           <input class="input" id="mf-title" name="title" maxlength="150" value="${esc(m?.title || '')}" required></div>
         <div class="field"><label for="mf-desc">Описание <span class="opt">(по желание)</span></label>
           <textarea class="input" id="mf-desc" name="description" rows="2" maxlength="1000">${esc(m?.description || '')}</textarea></div>
-        <fieldset class="field" style="border:0;padding:0;margin:0">
-          <legend class="label" style="margin-bottom:.35rem">Кой го вижда</legend>
-          <div class="segmented">
-            <input type="radio" id="mf-all" name="audience" value="all" ${m?.audience !== 'teachers' ? 'checked' : ''}><label for="mf-all">Всички</label>
-            <input type="radio" id="mf-t" name="audience" value="teachers" ${m?.audience === 'teachers' ? 'checked' : ''}><label for="mf-t">Само учители</label>
-          </div>
-        </fieldset>
+        <div class="row">
+          <div class="field"><label for="mf-tab">Къде да стои</label>
+            <select class="input" id="mf-tab" name="tab">
+              ${Object.entries(TAB_NAMES).map(([k, v]) => `<option value="${k}" ${k === curTab ? 'selected' : ''}>${v}</option>`).join('')}
+            </select></div>
+          <div class="field"><label for="mf-aud">Кой го вижда</label>
+            <select class="input" id="mf-aud" name="audience">
+              <option value="all" ${m?.audience !== 'teachers' ? 'selected' : ''}>Всички</option>
+              <option value="teachers" ${m?.audience === 'teachers' ? 'selected' : ''}>Само учители</option>
+            </select></div>
+        </div>
         <div class="progress" hidden><div class="bar"></div><span class="ptext"></span></div>
         <div class="error-box" role="alert"></div>
         <div class="buttons">
@@ -289,9 +252,10 @@ export function materialsPanel(panel, { slug, materials, onChange }) {
       e.preventDefault();
       const err = $('.error-box', form);
       const submit = $('button[type="submit"]', form);
+      const prog = $('.progress', form);
       err.textContent = '';
       const data = Object.fromEntries(new FormData(form));
-      const meta = { title: data.title, description: data.description, audience: data.audience };
+      const meta = { title: data.title, description: data.description, audience: data.audience, tab: data.tab };
       busy = true;
       submit.disabled = true;
       try {
@@ -306,7 +270,6 @@ export function materialsPanel(panel, { slug, materials, onChange }) {
           if (!f) throw new Error('Избери файл.');
           if (f.size > 25 * 1048576) throw new Error('Файлът е над 25 MB. Сложи го в Google Drive и добави линк към него.');
           if (!meta.title.trim()) meta.title = f.name;
-          const prog = $('.progress', form);
           prog.hidden = false;
           await uploadFile(slug, f, meta, (p) => {
             $('.bar', prog).style.width = `${Math.round(p * 100)}%`;
@@ -319,7 +282,7 @@ export function materialsPanel(panel, { slug, materials, onChange }) {
         await reload();
       } catch (ex) {
         err.textContent = ex.message;
-        $('.progress', form) && ($('.progress', form).hidden = true);
+        prog.hidden = true;
       } finally {
         busy = false;
         submit.disabled = false;
@@ -330,7 +293,7 @@ export function materialsPanel(panel, { slug, materials, onChange }) {
   }
 
   function confirmDelete(m) {
-    const dlg = $('.mdlg', panel);
+    const dlg = $('.mdlg', root);
     dlg.innerHTML = `<h2>Изтрий материала?</h2>
       <p>„${esc(m.title)}“ ще изчезне за всички. Това не може да се върне.</p>
       <div class="buttons"><button class="btn ghost" type="button" data-close>Отказ</button>
@@ -350,36 +313,36 @@ export function materialsPanel(panel, { slug, materials, onChange }) {
   }
 
   // ---- Събития ----
-  panel.addEventListener('click', (e) => {
+  root.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-m]');
-    if (!btn || !panel.contains(btn)) return;
-    const m = list.find((x) => x.id === Number(btn.dataset.id));
+    if (!btn || !root.contains(btn)) return;
+    const m = everything.find((x) => x.id === Number(btn.dataset.id));
     const act = btn.dataset.m;
     if (act === 'upload') openForm('upload');
     else if (act === 'link') openForm('link');
     else if (act === 'edit' && m) openForm('edit', m);
     else if (act === 'delete' && m) confirmDelete(m);
   });
-  bindFileActions(panel, () => list);
+  bindFileActions(root, () => everything);
 
   if (staff) {
-    panel.addEventListener('dragover', (e) => {
+    root.addEventListener('dragover', (e) => {
       if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
       e.preventDefault();
-      $('.mats', panel)?.classList.add('dragging');
+      $('.mats', root)?.classList.add('dragging');
     });
-    panel.addEventListener('dragleave', (e) => {
-      if (!panel.contains(e.relatedTarget)) $('.mats', panel)?.classList.remove('dragging');
+    root.addEventListener('dragleave', (e) => {
+      if (!root.contains(e.relatedTarget)) $('.mats', root)?.classList.remove('dragging');
     });
-    panel.addEventListener('drop', (e) => {
+    root.addEventListener('drop', (e) => {
       const f = e.dataTransfer?.files?.[0];
       if (!f) return;
       e.preventDefault();
-      $('.mats', panel)?.classList.remove('dragging');
+      $('.mats', root)?.classList.remove('dragging');
       openForm('upload', null, f);
     });
   }
 
   draw();
+  return { open: (mode) => openForm(mode) };
 }
-

@@ -1,0 +1,5 @@
+Външни библиотеки (непроменени копия):
+- Quill 2.0.3 — BSD-3-Clause — https://quilljs.com
+- DOMPurify 3.2.6 — Apache-2.0 / MPL-2.0 — https://github.com/cure53/DOMPurify
+- mammoth 1.9.1 — BSD-2-Clause — https://github.com/mwilliamson/mammoth.js
+- PDF.js 3.11.174 (legacy build) — Apache-2.0 — https://mozilla.github.io/pdf.js/

@@ -5,7 +5,11 @@ import { schema, seed } from './db-data.js';
 import { HttpError } from './http.js';
 
 // Нови колони в съществуващи таблици: [таблица, колона, команда]
-const COLUMNS = [['materials', 'chunk_size', 'ALTER TABLE materials ADD COLUMN chunk_size INTEGER']];
+const COLUMNS = [
+  ['materials', 'chunk_size', 'ALTER TABLE materials ADD COLUMN chunk_size INTEGER'],
+  ['materials', 'tab', "ALTER TABLE materials ADD COLUMN tab TEXT NOT NULL DEFAULT 'materiali'"],
+  ['sections', 'body_text', 'ALTER TABLE sections ADD COLUMN body_text TEXT'],
+];
 
 let ready = false;
 

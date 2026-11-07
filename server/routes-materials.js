@@ -11,12 +11,15 @@ export const TOTAL_LIMIT = 300 * 1024 * 1024; // общо място за фай
 // Файлове, които могат да навредят на училищните компютри
 const BLOCKED = /\.(exe|msi|bat|cmd|com|scr|pif|vbs|vbe|js|jse|wsf|wsh|ps1|sh|apk|app|dmg|jar|html?|xhtml|php|hta|lnk|reg|cpl)$/i;
 
+export const TABS = ['urok', 'karti', 'zadachi', 'materiali'];
+const tabOf = (v) => (TABS.includes(v) ? v : 'materiali');
+
 const isStaff = (u) => u.role === 'teacher' || u.role === 'admin';
 const canEdit = (u, m) => u.role === 'admin' || (m.created_by !== null && m.created_by === u.id);
 const mb = (b) => Math.max(0, Math.floor(b / 1048576));
 
 const FIELDS = `m.id, m.section_id, m.kind, m.title, m.description, m.url, m.file_name, m.mime, m.size, m.chunks,
-                m.audience, m.created_by, m.created_at, m.updated_at, u.name AS author`;
+                m.audience, m.tab, m.created_by, m.created_at, m.updated_at, u.name AS author`;
 
 const shape = (m, me) => ({
   id: m.id,
@@ -29,6 +32,7 @@ const shape = (m, me) => ({
   size: m.size,
   chunks: m.chunks,
   audience: m.audience,
+  tab: m.tab || 'materiali',
   author: m.author,
   createdAt: m.created_at,
   canEdit: canEdit(me, m),
@@ -97,6 +101,7 @@ function readMeta(b) {
     title,
     description: clean(b.description, 1000) || null,
     audience: b.audience === 'teachers' ? 'teachers' : 'all',
+    tab: tabOf(b.tab),
   };
 }
 
@@ -112,10 +117,10 @@ export async function create(env, request) {
   if (b.kind === 'link') {
     const url = checkUrl(b.url);
     const res = await env.DB.prepare(
-      `INSERT INTO materials (section_id, kind, title, description, url, audience, created_by)
-       VALUES (?, 'link', ?, ?, ?, ?, ?)`,
+      `INSERT INTO materials (section_id, kind, title, description, url, audience, tab, created_by)
+       VALUES (?, 'link', ?, ?, ?, ?, ?, ?)`,
     )
-      .bind(section.id, meta.title, meta.description, url, meta.audience, me.id)
+      .bind(section.id, meta.title, meta.description, url, meta.audience, meta.tab, me.id)
       .run();
     return json({ id: res.meta.last_row_id }, 201);
   }
@@ -143,10 +148,10 @@ export async function create(env, request) {
   const mime = clean(b.mime, 100) || 'application/octet-stream';
   const chunks = Math.ceil(size / CHUNK);
   const res = await env.DB.prepare(
-    `INSERT INTO materials (section_id, kind, title, description, file_name, mime, size, chunks, chunk_size, audience, status, created_by)
-     VALUES (?, 'file', ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?)`,
+    `INSERT INTO materials (section_id, kind, title, description, file_name, mime, size, chunks, chunk_size, audience, tab, status, created_by)
+     VALUES (?, 'file', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?)`,
   )
-    .bind(section.id, meta.title, meta.description, fileName, mime, size, chunks, CHUNK, meta.audience, me.id)
+    .bind(section.id, meta.title, meta.description, fileName, mime, size, chunks, CHUNK, meta.audience, meta.tab, me.id)
     .run();
   return json({ id: res.meta.last_row_id, chunkSize: CHUNK, chunks }, 201);
 }
@@ -221,9 +226,9 @@ export async function update(env, request, id) {
   const meta = readMeta(b);
   const url = m.kind === 'link' ? checkUrl(b.url ?? m.url) : null;
   await env.DB.prepare(
-    "UPDATE materials SET title = ?, description = ?, audience = ?, url = ?, updated_at = datetime('now') WHERE id = ?",
+    "UPDATE materials SET title = ?, description = ?, audience = ?, tab = ?, url = ?, updated_at = datetime('now') WHERE id = ?",
   )
-    .bind(meta.title, meta.description, meta.audience, url, m.id)
+    .bind(meta.title, meta.description, meta.audience, meta.tab, url, m.id)
     .run();
   return json({ ok: true });
 }

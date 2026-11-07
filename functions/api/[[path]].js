@@ -24,6 +24,9 @@ const routes = [
 
   ['GET', '/api/overview', content.overview],
   ['GET', '/api/sections/:slug', content.section],
+  ['PUT', '/api/sections/:slug/body', content.saveBody],
+  ['GET', '/api/sections/:slug/revisions', content.revisions],
+  ['GET', '/api/sections/:slug/revisions/:id', content.revision],
   ['GET', '/api/links', content.links],
   ['GET', '/api/search', content.search],
 
